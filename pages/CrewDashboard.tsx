@@ -25,6 +25,7 @@ export const CrewDashboard: React.FC = () => {
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
 
   const [state, setState] = useState<AppState>({
     status: LoadStatus.IDLE,
@@ -58,8 +59,7 @@ export const CrewDashboard: React.FC = () => {
     if (isLaView) {
         navigate('/station');
     } else {
-        // Reload main data with new name (mostly for validation/updates)
-        loadData(now, newName);
+        refreshData(now, newName);
     }
   };
 
@@ -68,39 +68,49 @@ export const CrewDashboard: React.FC = () => {
     navigate('/station');
   };
 
-  /**
-   * Instantly re-processes the local cache for a new time.
-   * This updates the UI (Status, On/Off Call) without touching the network.
-   */
-  const recalculateFromCache = useCallback(async (target: Date, nameOverride?: string) => {
+  const refreshData = useCallback(async (target: Date, nameOverride?: string) => {
     const nameToFetch = nameOverride !== undefined ? nameOverride : crewName;
-    try {
-        // Force cache usage (true) to recalculate column/status for the *new* target time
-        const cachedResult = await fetchRosterData(target, nameToFetch, true);
-        if (cachedResult.isCachedData) {
-            setState(prev => ({
-                ...prev,
-                data: cachedResult,
-                targetDate: target,
-            }));
-        }
-    } catch (e) {
-        console.debug("Cache recalculation failed", e);
-    }
-  }, [crewName]);
 
-  const loadData = useCallback(async (target: Date, nameOverride?: string) => {
-    const nameToFetch = nameOverride !== undefined ? nameOverride : crewName;
-    
-    // 1. Trigger Network Fetch (Background update)
-    setState(prev => ({ 
-        ...prev, 
-        status: LoadStatus.LOADING, 
-        targetDate: target 
+    let loadedCachedRoster = false;
+
+    // Render the last saved roster first. This is intentionally cache-only so
+    // startup never waits for a network timeout before showing on-call status.
+    try {
+      const cachedResult = await fetchRosterData(target, nameToFetch, 'cache-only');
+      loadedCachedRoster = true;
+      setState({
+        status: LoadStatus.SUCCESS,
+        data: cachedResult,
+        error: null,
+        targetDate: target,
+      });
+    } catch (error) {
+      console.debug('No matching saved roster is available', error);
+    }
+
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      if (!loadedCachedRoster) {
+        setState({
+          status: LoadStatus.ERROR,
+          data: null,
+          error: "You're offline and no saved roster is available yet. Connect once to save the current roster for offline use.",
+          targetDate: target,
+        });
+      }
+      return;
+    }
+
+    setIsOnline(true);
+    setState(prev => ({
+      ...prev,
+      status: LoadStatus.LOADING,
+      error: null,
+      targetDate: target,
     }));
 
     try {
-      const networkResult = await fetchRosterData(target, nameToFetch, false); // false = force network
+      const networkResult = await fetchRosterData(target, nameToFetch, 'network-first');
       setState({
         status: LoadStatus.SUCCESS,
         data: networkResult,
@@ -109,15 +119,18 @@ export const CrewDashboard: React.FC = () => {
       });
     } catch (err: any) {
       console.error("Network fetch failed", err);
-      // Only show error if we don't have cached data displayed
       setState(prev => {
         if (prev.data) {
-             return prev;
+          return {
+            ...prev,
+            status: LoadStatus.SUCCESS,
+            error: err.message || 'The saved roster could not be refreshed.',
+          };
         }
         return {
-            ...prev,
-            status: LoadStatus.ERROR,
-            error: err.message || "Failed to load roster data"
+          ...prev,
+          status: LoadStatus.ERROR,
+          error: err.message || 'Failed to load roster data',
         };
       });
     }
@@ -127,8 +140,7 @@ export const CrewDashboard: React.FC = () => {
   useEffect(() => {
     const isLaView = localStorage.getItem(LA_VIEW_KEY) === 'true';
     if (!isLaView) {
-        recalculateFromCache(now);
-        loadData(now);
+        refreshData(now);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
@@ -136,20 +148,37 @@ export const CrewDashboard: React.FC = () => {
   const handleManualRefresh = useCallback(() => {
     const currentMoment = new Date();
     setNow(currentMoment);
-    recalculateFromCache(currentMoment);
-    loadData(currentMoment);
-  }, [loadData, recalculateFromCache]);
+    refreshData(currentMoment);
+  }, [refreshData]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      const currentMoment = new Date();
+      setNow(currentMoment);
+      refreshData(currentMoment);
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [refreshData]);
 
   // Handle PWA/Mobile Wake Up
   useEffect(() => {
+    let lastWakeRefresh = 0;
     const handleWakeUp = () => {
       if (document.visibilityState === 'visible') {
+        const wakeTimestamp = Date.now();
+        if (wakeTimestamp - lastWakeRefresh < 1000) return;
+        lastWakeRefresh = wakeTimestamp;
         const wakeUpTime = new Date();
         setNow(wakeUpTime);
-        recalculateFromCache(wakeUpTime);
-        setTimeout(() => {
-            loadData(wakeUpTime);
-        }, 500);
+        refreshData(wakeUpTime);
       }
     };
     document.addEventListener("visibilitychange", handleWakeUp);
@@ -158,7 +187,7 @@ export const CrewDashboard: React.FC = () => {
       document.removeEventListener("visibilitychange", handleWakeUp);
       window.removeEventListener("focus", handleWakeUp);
     };
-  }, [handleManualRefresh, recalculateFromCache, loadData]);
+  }, [refreshData]);
 
   // Smart Auto-Refresh
   useEffect(() => {
@@ -176,11 +205,10 @@ export const CrewDashboard: React.FC = () => {
     const timerId = setTimeout(() => {
       const newNow = new Date();
       setNow(newNow);
-      recalculateFromCache(newNow);
-      loadData(newNow);
+      refreshData(newNow);
     }, delay);
     return () => clearTimeout(timerId);
-  }, [now, loadData, recalculateFromCache]); 
+  }, [now, refreshData]);
 
   // Get current status from the main forecast (index 0 is current hour)
   const currentStatus = state.data?.personalForecast?.[0]?.status;
@@ -196,6 +224,9 @@ export const CrewDashboard: React.FC = () => {
         sheetName={state.data?.sheetName}
         status={state.data?.summary.status}
         personalStatus={currentStatus}
+        displayTime={now}
+        isOffline={!isOnline}
+        isCachedData={state.data?.isCachedData}
         showSettings={true}
         showPersonalStatus={true}
         title="Cruise Status 2"

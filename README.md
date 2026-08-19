@@ -18,3 +18,12 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Itgwob3jnklCGp1snQWvYM
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Offline behaviour
+
+- The application shell, icons, JavaScript, and CSS are precached after the first successful visit.
+- The most recent roster CSV is saved locally and rendered before a network refresh is attempted.
+- Current and upcoming roster weeks are retained so the on-call view can be recalculated as time advances.
+- When connectivity returns, the app refreshes the saved roster automatically.
+
+At least one successful online visit is required before roster data can be shown offline.

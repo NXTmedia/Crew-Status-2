@@ -1,10 +1,11 @@
 import React, { useRef } from 'react';
-import { Anchor, RotateCw, CheckCircle2, AlertTriangle, XCircle, Settings } from 'lucide-react';
+import { Anchor, RotateCw, CheckCircle2, AlertTriangle, XCircle, Settings, WifiOff, Database } from 'lucide-react';
 import { formatTime, formatDateDisplay } from '../services/dateUtils';
 import { OperationalStatus } from '../types';
 
 interface HeaderProps {
   lastUpdated?: Date;
+  displayTime?: Date;
   onRefresh: () => void;
   onOpenSettings?: () => void;
   onTitleLongPress?: () => void;
@@ -12,6 +13,8 @@ interface HeaderProps {
   sheetName?: string;
   status?: OperationalStatus;
   personalStatus?: number; // 2 = On Call
+  isOffline?: boolean;
+  isCachedData?: boolean;
   showPersonalStatus?: boolean;
   showSettings?: boolean;
   title?: string;
@@ -19,18 +22,22 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ 
   lastUpdated, 
+  displayTime,
   onRefresh, 
   onOpenSettings, 
   onTitleLongPress,
   isLoading, 
   status, 
   personalStatus,
+  isOffline = false,
+  isCachedData = false,
   showPersonalStatus = true,
   showSettings = true,
   title = "Cruise Status 2"
 }) => {
   
-  const displayDate = lastUpdated || new Date();
+  const displayDate = displayTime || new Date();
+  const hasPersonalStatus = personalStatus !== undefined;
   const isOnCall = personalStatus === 2;
   // Use ReturnType<typeof setTimeout> for cross-environment compatibility (Node vs Browser types)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,7 +110,11 @@ export const Header: React.FC<HeaderProps> = ({
   const separatorColor = "text-slate-700";
   
   // Status Text Color
-  const statusTextColor = isOnCall ? "text-safe" : "text-slate-500";
+  const statusTextColor = !hasPersonalStatus
+    ? 'text-amber-400'
+    : isOnCall
+      ? 'text-safe'
+      : 'text-slate-500';
 
   return (
     <header className="mb-6 select-none">
@@ -157,7 +168,9 @@ export const Header: React.FC<HeaderProps> = ({
                      
                      {/* Status Light Indicator */}
                      <span className="relative flex h-2.5 w-2.5 mr-2">
-                        {isOnCall ? (
+                        {!hasPersonalStatus ? (
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+                        ) : isOnCall ? (
                             <>
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-safe"></span>
@@ -169,12 +182,26 @@ export const Header: React.FC<HeaderProps> = ({
 
                      {/* Status Text */}
                      <span className={`${baseValue} ${statusTextColor} uppercase tracking-wider`}>
-                        {isOnCall ? 'ON CALL' : 'OFF CALL'}
+                        {!hasPersonalStatus ? 'STATUS UNKNOWN' : isOnCall ? 'ON CALL' : 'OFF CALL'}
                      </span>
                    </>
                  )}
               </div>
             </div>
+
+            {(isOffline || isCachedData) && (
+              <div className={`mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-lg px-3 py-2 border ${
+                isOffline
+                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                  : 'bg-blue-500/10 border-blue-500/20 text-blue-300'
+              }`}>
+                {isOffline ? <WifiOff className="w-3.5 h-3.5" /> : <Database className="w-3.5 h-3.5" />}
+                <span>
+                  {isOffline ? 'Offline — showing saved roster' : 'Showing saved roster while refreshing'}
+                  {lastUpdated && ` · saved ${formatDateDisplay(lastUpdated)} at ${formatTime(lastUpdated)}`}
+                </span>
+              </div>
+            )}
         </div>
 
         {/* Status Card */}

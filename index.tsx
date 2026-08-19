@@ -1,6 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './index.css';
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({
+  immediate: true,
+  onRegisterError(error) {
+    console.error('Offline support could not be registered', error);
+  },
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

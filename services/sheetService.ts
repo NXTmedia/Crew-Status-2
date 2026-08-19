@@ -13,7 +13,7 @@ interface FetchResult {
 }
 
 const CACHE_KEY = 'RNLI_ROSTER_CACHE_V2';
-const MAX_CACHED_SHEETS = 3;
+const MAX_CACHED_SHEETS = 6;
 const ROSTER_START_COL_INDEX = 2; // Column C
 const HOURS_IN_WEEK = 168; // 7 days * 24 hours
 // The index just after the last valid hour (Tuesday 23:00 is index 169, so 170 is the first invalid one)
@@ -26,6 +26,16 @@ interface CacheEntry {
 }
 
 type CacheStore = Record<string, CacheEntry>;
+
+export type RosterLoadMode = 'cache-only' | 'cache-first' | 'network-first';
+
+interface CsvLoadResult {
+  csvData: any[];
+  usedSheetName: string;
+  rawSnippet: string;
+  isCached: boolean;
+  sourceTimestamp: number;
+}
 
 const loadCacheStore = (): CacheStore => {
   try {
@@ -73,18 +83,19 @@ const parseCSV = (text: string): Promise<any[]> => {
   });
 };
 
-const FETCH_TIMEOUT_MS = 15000;
+const FETCH_TIMEOUT_MS = 8000;
 
 const fetchCSV = async (sheetName: string): Promise<{ data: any[], rawSnippet: string, csvText: string }> => {
-  // Added timestamp to URL to bust Google's aggressive caching
-  const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&_t=${Date.now()}`;
+  // A stable URL lets the service worker keep a second, browser-managed copy.
+  // `no-cache` still revalidates it whenever the network is available.
+  const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   let response: Response;
   try {
-    response = await fetch(url, { signal: controller.signal });
+    response = await fetch(url, { signal: controller.signal, cache: 'no-cache' });
   } catch (e: any) {
     clearTimeout(timeoutId);
     if (e.name === 'AbortError') {
@@ -140,66 +151,76 @@ const calculateOperationalStatus = (helms: number, navs: number, total: number):
 /**
  * Loads CSV data.
  * @param targetDate The date we need data for
- * @param useCacheFirst If true, will return cached data if it matches the potential tab names, skipping network.
+ * Loads the roster using an explicit cache/network strategy.
  */
-const loadCsvForDate = async (targetDate: Date, useCacheFirst: boolean = false): Promise<{ csvData: any[], usedSheetName: string, rawSnippet: string, isCached: boolean }> => {
+const loadCsvForDate = async (
+  targetDate: Date,
+  mode: RosterLoadMode = 'network-first'
+): Promise<CsvLoadResult> => {
   const potentialSheetNames = generatePossibleTabNames(targetDate);
   let csvData: any[] | null = null;
   let rawSnippet = '';
   let usedSheetName = '';
   let isCached = false;
+  let sourceTimestamp = Date.now();
 
-  // 1. Try Cache First (if requested)
-  if (useCacheFirst) {
+  const loadMatchingCache = async (): Promise<boolean> => {
     const cached = findCacheEntry(potentialSheetNames);
-    if (cached) {
-      try {
-          csvData = await parseCSV(cached.csvText);
-          rawSnippet = cached.csvText.split('\n').slice(0, 10).join('\n');
-          usedSheetName = cached.sheetName;
-          isCached = true;
-          // Return immediately if cache hit
-          return { csvData, usedSheetName, rawSnippet, isCached };
-      } catch (e) {
-          console.error("Failed to parse cached data", e);
-      }
-    }
-  }
+    if (!cached) return false;
 
-  // 2. Try Network Fetch (if cache missed or not requested)
-  for (const name of potentialSheetNames) {
     try {
-      const result = await fetchCSV(name);
-      csvData = result.data;
-      rawSnippet = result.rawSnippet;
-      usedSheetName = name;
-      saveToCache(name, result.csvText);
-      break; 
-    } catch (e) {
-      console.warn(`Failed to fetch tab "${name}":`, e);
+      csvData = await parseCSV(cached.csvText);
+      rawSnippet = cached.csvText.split('\n').slice(0, 10).join('\n');
+      usedSheetName = cached.sheetName;
+      sourceTimestamp = cached.timestamp;
+      isCached = true;
+      return true;
+    } catch (error) {
+      console.error('Failed to parse cached roster data', error);
+      return false;
+    }
+  };
+
+  if (mode === 'cache-only' || mode === 'cache-first') {
+    if (await loadMatchingCache()) {
+      return { csvData: csvData!, usedSheetName, rawSnippet, isCached, sourceTimestamp };
+    }
+
+    if (mode === 'cache-only') {
+      throw new Error('NO_CACHED_ROSTER');
     }
   }
 
-  // 3. Fallback to Cache (if network failed and we haven't tried cache yet)
-  if (!csvData && !useCacheFirst) {
-    const cached = findCacheEntry(potentialSheetNames);
-    if (cached) {
+  const browserIsOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+  if (!browserIsOffline) {
+    for (const name of potentialSheetNames) {
       try {
-        csvData = await parseCSV(cached.csvText);
-        rawSnippet = cached.csvText.split('\n').slice(0, 10).join('\n');
-        usedSheetName = cached.sheetName;
-        isCached = true;
-      } catch (e) {
-        console.error("Failed to parse cached data", e);
+        const result = await fetchCSV(name);
+        csvData = result.data;
+        rawSnippet = result.rawSnippet;
+        usedSheetName = name;
+        sourceTimestamp = Date.now();
+        saveToCache(name, result.csvText);
+        break;
+      } catch (error) {
+        console.warn(`Failed to fetch tab "${name}":`, error);
       }
     }
+  }
+
+  if (!csvData && mode === 'network-first') {
+    await loadMatchingCache();
   }
 
   if (!csvData) {
-    throw new Error(`Could not load roster data.`);
+    if (browserIsOffline) {
+      throw new Error('OFFLINE_WITHOUT_CACHE');
+    }
+    throw new Error('Could not load roster data.');
   }
 
-  return { csvData, usedSheetName, rawSnippet, isCached };
+  return { csvData, usedSheetName, rawSnippet, isCached, sourceTimestamp };
 };
 
 export const fetchPersonalSchedule = async (targetDate: Date, crewName: string): Promise<{ data: PersonalForecastEntry[], found: boolean }> => {
@@ -207,7 +228,7 @@ export const fetchPersonalSchedule = async (targetDate: Date, crewName: string):
   // If the user swipes to a day covered by the current cached sheet, it will load instantly.
   let csvData: any[];
   try {
-    const result = await loadCsvForDate(targetDate, true);
+    const result = await loadCsvForDate(targetDate, 'cache-first');
     csvData = result.csvData;
   } catch (e) {
     // If targetDate is in a future week, this likely means the sheet doesn't exist yet
@@ -385,8 +406,12 @@ const parseSheetRows = (ctx: RowParseContext): boolean => {
   return crewNameFound;
 };
 
-export const fetchRosterData = async (targetDate: Date, crewName?: string, useCacheFirst: boolean = false): Promise<SheetParseResult> => {
-  const { csvData, usedSheetName, rawSnippet, isCached } = await loadCsvForDate(targetDate, useCacheFirst);
+export const fetchRosterData = async (
+  targetDate: Date,
+  crewName?: string,
+  mode: RosterLoadMode = 'network-first'
+): Promise<SheetParseResult> => {
+  const { csvData, usedSheetName, rawSnippet, isCached, sourceTimestamp } = await loadCsvForDate(targetDate, mode);
 
   // Calculate Column Logic
   const rotationStart = getLastWednesday(targetDate);
@@ -451,24 +476,32 @@ export const fetchRosterData = async (targetDate: Date, crewName?: string, useCa
     debugColumnIndex: columnIndex,
   });
 
-  // --- Pre-fetch next week's sheet to populate cache (skip on cache-first to stay instant) ---
+  // Work out whether the 24-hour view crosses into the next roster week.
+  const overflowStartIndex = Math.max(0, ROSTER_END_COL_INDEX - columnIndex);
+  const overflowHours = STATION_FORECAST_HOURS - overflowStartIndex;
+  const needsNextWeekNow = overflowHours > 0 && overflowStartIndex < STATION_FORECAST_HOURS;
+
+  // Load next week synchronously only when it is required for the visible
+  // forecast. Otherwise warm it in the background without delaying this view.
   const nextWed = addDays(rotationStart, 7);
   let nextCsvData: any[] | null = null;
-  if (!isCached) {
+  if (needsNextWeekNow) {
     try {
-      const nextResult = await loadCsvForDate(nextWed, useCacheFirst);
+      const nextMode: RosterLoadMode = isCached ? 'cache-only' : mode;
+      const nextResult = await loadCsvForDate(nextWed, nextMode);
       nextCsvData = nextResult.csvData;
     } catch (e) {
       // Next week's sheet doesn't exist yet — that's fine
       console.debug("Next week sheet not available:", e);
     }
+  } else if (!isCached && mode !== 'cache-only') {
+    void loadCsvForDate(nextWed, 'network-first').catch((error) => {
+      console.debug('Next week roster was not available for background caching', error);
+    });
   }
 
   // --- Cross-week stitching: use next week data if forecast overflows ---
-  const overflowStartIndex = Math.max(0, ROSTER_END_COL_INDEX - columnIndex);
-  const overflowHours = STATION_FORECAST_HOURS - overflowStartIndex;
-
-  if (nextCsvData && overflowHours > 0 && overflowStartIndex < STATION_FORECAST_HOURS) {
+  if (nextCsvData && needsNextWeekNow) {
     parseSheetRows({
       csvData: nextCsvData,
       forecastAccumulators,
@@ -525,7 +558,7 @@ export const fetchRosterData = async (targetDate: Date, crewName?: string, useCa
     forecast,
     personalForecast,
     crewNameFound,
-    fetchedAt: new Date(),
+    fetchedAt: new Date(sourceTimestamp),
     sheetName: usedSheetName,
     isCachedData: isCached,
     debug: debugInfo
