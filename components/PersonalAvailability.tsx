@@ -16,7 +16,7 @@ interface PersonalAvailabilityProps {
 export const getAvailabilityBoxClass = (isCurrentHour: boolean, isAvailable: boolean) =>
   `w-full aspect-[4/3] rounded-md transition-all duration-300 relative ${
     isCurrentHour
-      ? 'animate-current-hour z-10'
+      ? 'border-2 border-white animate-current-hour z-10'
       : !isAvailable ? 'border border-slate-700/50' : ''
   } ${
     isAvailable

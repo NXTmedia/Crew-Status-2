@@ -135,13 +135,15 @@ test('station forecast counts remain visible for selected and unselected hours',
   act(() => component.unmount());
 });
 
-test('the current availability hour uses a one-second pulse without a white border', () => {
+test('the current availability hour uses a pulsing white border once per second', () => {
   const currentHourClass = getAvailabilityBoxClass(true, true);
   const cssAsset = readdirSync(resolve(process.cwd(), 'dist', 'assets'))
     .find(name => /^index-[A-Za-z0-9_-]+\.css$/.test(name));
   const compiledCss = readFileSync(resolve(process.cwd(), 'dist', 'assets', cssAsset), 'utf8');
 
   assert.match(currentHourClass, /animate-current-hour/);
-  assert.doesNotMatch(currentHourClass, /border-white/);
+  assert.match(currentHourClass, /border-2/);
+  assert.match(currentHourClass, /border-white/);
   assert.match(compiledCss, /\.animate-current-hour\{animation:current-hour-pulse 1s ease-in-out infinite\}/);
+  assert.match(compiledCss, /@keyframes current-hour-pulse\{0%,to\{border-color:#fff;box-shadow:0 0 #ffffffb3\}50%\{border-color:#ffffff80;box-shadow:0 0 0 6px #fff0\}\}/);
 });

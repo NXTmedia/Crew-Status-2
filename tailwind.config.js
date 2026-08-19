@@ -23,8 +23,14 @@ export default {
       },
       keyframes: {
         'current-hour-pulse': {
-          '0%, 100%': { transform: 'scale(1)', opacity: '1' },
-          '50%': { transform: 'scale(1.08)', opacity: '0.55' },
+          '0%, 100%': {
+            borderColor: 'rgba(255, 255, 255, 1)',
+            boxShadow: '0 0 0 0 rgba(255, 255, 255, 0.7)',
+          },
+          '50%': {
+            borderColor: 'rgba(255, 255, 255, 0.5)',
+            boxShadow: '0 0 0 6px rgba(255, 255, 255, 0)',
+          },
         },
       },
       animation: {
