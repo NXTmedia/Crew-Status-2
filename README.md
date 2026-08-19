@@ -2,6 +2,28 @@
 
 An offline-ready dashboard for viewing station crewing levels, personal availability, and Wednesday-to-Tuesday roster forecasts.
 
+Current release: **v2.2.0**
+
+## Features
+
+- Crew view with personal on-call status and a 24-hour availability timeline.
+- Station Board with grouped active crew, a selectable 24-hour forecast, and a Wednesday-to-Tuesday seven-day overview.
+- Crew counts displayed directly in forecast boxes.
+- Installable PWA with saved roster data available offline after the first successful online load.
+
+## Roster week and clock changes
+
+- Each worksheet represents a fixed Wednesday-to-Tuesday week containing 168 hourly slots.
+- The following week's personal availability remains hidden until Tuesday and is used only after its worksheet dates have been validated.
+- Spreadsheet days always map to 24 fixed wall-clock slots (`00` through `23`), including the Sundays when UK clocks change.
+- When clocks go forward, the non-existent `01` slot is never marked as the current hour. When clocks go back, both occurrences of `01` use the same spreadsheet slot because the worksheet does not contain a 25th hour.
+
+## Refresh behaviour
+
+The roster is refreshed when the current view opens, the refresh button is pressed, connectivity returns, the app becomes visible or focused, a crew name is saved, or the aligned 15-minute refresh interval is reached.
+
+Only one roster update runs at a time. Extra triggers are collapsed into the latest pending refresh, which runs after the active request finishes. An active request is cancelled when its dashboard unmounts.
+
 ## Local development
 
 Prerequisites: Node.js 20 or newer.
@@ -38,4 +60,8 @@ The included `netlify.toml` configures Netlify to run `npm run build` and publis
 
 ## Tests
 
-`npm test` builds the production PWA and runs the offline, roster-boundary, and UI regression suites.
+`npm test` builds the production PWA and runs the offline, roster-boundary, daylight-saving, refresh-queue, and UI regression suites.
+
+## Versioning
+
+`package.json` is the source of truth for the application version. The Settings modal reads this value directly so the displayed version and package release cannot drift apart.

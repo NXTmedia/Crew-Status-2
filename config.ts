@@ -1,3 +1,7 @@
+import packageInfo from './package.json';
+
+export const APP_VERSION = packageInfo.version;
+
 export const CONFIG = {
   /**
    * The ID of the Google Sheet  1jt4GN4m5re3K70b9DauuG6t_4imENImUT4VitLxi_aw to fetch data from. 

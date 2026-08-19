@@ -1,6 +1,16 @@
-# Crew status 2
+# Crew Status 2 release notes
 
-1. Just below the on-call status section, add a banner if I'm offline, indicating that the app is currently offline. Don't display this banner if I have an internet connection.
-2. At the moment when I tap on one of the boxes below the overall status, it shows the names of the individuals on call for each group. I want to change that so when I tap on any of them, I can see the full list of all of the crew and their names on call, rather than the individual groups. It shouldn't matter which box I tap on, I'll see the same list.
-3. In the station 24-hour forecast, if I tap on the boxes, it shows the number of crew on call. I want that to be permanently displayed. So I always see the numbers in the boxes.
-4. In the my availability view, it puts a white border around the current hour. I would like this to be the box to be pulsing once a second instead of the white border.
+## v2.2.0
+
+- Roster hours now remain aligned with the worksheet's fixed 24 slots on both UK daylight-saving changeovers.
+- Refreshes now run one at a time. Repeated triggers are collapsed into one latest pending refresh rather than starting competing requests.
+- The Settings version now comes directly from `package.json`.
+- Added regression tests for the March and October clock changes, request cancellation, refresh queuing, and displayed application version.
+
+## v2.1.0
+
+- Added offline application-shell and validated roster caching, with an accurate offline status banner.
+- Added Wednesday-to-Tuesday worksheet validation and delayed next-week availability until Tuesday.
+- Added the Station Board seven-day forecast with two rows of 12 hours, hour-ending labels, and visible crew counts.
+- Grouped active crew names by role while allowing every summary card to open the complete on-call list.
+- Added a Safari-safe current-hour border and changed the personal availability pulse to a two-second cycle.

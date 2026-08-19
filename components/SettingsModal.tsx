@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
+import { APP_VERSION } from '../config';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -72,7 +73,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, c
             </button>
           </div>
 
-          <p className="text-center text-xs text-slate-600 mb-3">v2.1</p>
+          <p className="text-center text-xs text-slate-600 mb-3">v{APP_VERSION}</p>
 
           <div className="flex gap-3">
              <button

@@ -14,6 +14,7 @@ let getVisibleWeekDays;
 let StatusTimeline;
 let getAvailabilityBoxClass;
 let OperationalStatus;
+let SettingsModal;
 
 before(async () => {
   viteServer = await createServer({
@@ -29,6 +30,7 @@ before(async () => {
   ({ StationForecastGrid, getVisibleWeekDays } = await viteServer.ssrLoadModule('/components/StationForecastGrid.tsx'));
   ({ StatusTimeline } = await viteServer.ssrLoadModule('/components/StatusTimeline.tsx'));
   ({ getAvailabilityBoxClass } = await viteServer.ssrLoadModule('/components/PersonalAvailability.tsx'));
+  ({ SettingsModal } = await viteServer.ssrLoadModule('/components/SettingsModal.tsx'));
   ({ OperationalStatus } = await viteServer.ssrLoadModule('/types.ts'));
 });
 
@@ -92,6 +94,23 @@ test('the offline banner is visible only while the browser is offline', () => {
   assert.match(offlineLoadedText, /Offline — showing saved roster/);
   assert.doesNotMatch(offlineLoadedText, /no saved roster available/);
   assert.match(offlineEmptyText, /Offline — no saved roster available/);
+});
+
+test('settings displays the package version', () => {
+  const packageInfo = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
+  let component;
+  act(() => {
+    component = TestRenderer.create(React.createElement(SettingsModal, {
+      isOpen: true,
+      onClose: () => {},
+      currentName: 'Alex Example',
+      isLaViewEnabled: false,
+      onSave: () => {},
+    }));
+  });
+
+  assert.ok(flattenText(component.toJSON()).replaceAll(/\s/g, '').includes(`v${packageInfo.version}`));
+  act(() => component.unmount());
 });
 
 test('every summary card opens the same complete on-call crew list', () => {
