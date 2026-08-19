@@ -72,7 +72,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, c
             </button>
           </div>
 
-          <p className="text-center text-xs text-slate-600 mb-3">v2.0</p>
+          <p className="text-center text-xs text-slate-600 mb-3">v2.1</p>
 
           <div className="flex gap-3">
              <button

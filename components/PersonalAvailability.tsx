@@ -13,6 +13,17 @@ interface PersonalAvailabilityProps {
   lastRefreshTime?: Date; // Signal from parent to re-fetch
 }
 
+export const getAvailabilityBoxClass = (isCurrentHour: boolean, isAvailable: boolean) =>
+  `w-full aspect-[4/3] rounded-md transition-all duration-300 relative ${
+    isCurrentHour
+      ? 'animate-current-hour z-10'
+      : !isAvailable ? 'border border-slate-700/50' : ''
+  } ${
+    isAvailable
+      ? 'bg-safe shadow-[0_0_8px_rgba(40,167,69,0.4)]'
+      : 'bg-slate-800'
+  }`;
+
 export const PersonalAvailability: React.FC<PersonalAvailabilityProps> = ({ crewName, currentStatus, onOpenSettings, lastRefreshTime }) => {
   const [viewDate, setViewDate] = useState(new Date());
   const [now, setNow] = useState(new Date()); // Track real time for the highlight
@@ -33,7 +44,7 @@ export const PersonalAvailability: React.FC<PersonalAvailabilityProps> = ({ crew
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
-  // Timer to update 'now' every minute so the border moves automatically
+  // Timer to move the pulsing current-hour marker as time advances.
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(new Date());
@@ -177,15 +188,7 @@ export const PersonalAvailability: React.FC<PersonalAvailabilityProps> = ({ crew
           return (
             <div key={idx} className="flex flex-col gap-1 relative">
               <div
-                className={`w-full aspect-[4/3] rounded-md transition-all duration-300 relative ${
-                  isCurrentHour
-                    ? 'border-2 border-white/50 shadow-md z-10'
-                    : !isAvailable ? 'border border-slate-700/50' : ''
-                } ${
-                  isAvailable
-                    ? 'bg-safe shadow-[0_0_8px_rgba(40,167,69,0.4)]'
-                    : 'bg-slate-800'
-                }`}
+                className={getAvailabilityBoxClass(isCurrentHour, isAvailable)}
               ></div>
               <span className={`text-[11px] text-center font-medium tracking-tight ${isCurrentHour ? 'text-white font-bold' : 'text-slate-300'}`}>
                 {startHour}-{endHour}

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { RosterData, CrewMember } from '../types';
-import { SECTION_HEADERS } from '../constants';
 import { X, Users } from 'lucide-react';
 
 interface SummaryProps {
@@ -11,31 +10,35 @@ interface SummaryProps {
 }
 
 export const SummaryStats: React.FC<SummaryProps> = ({ helms, navs, crew, roster }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [modalTitle, setModalTitle] = useState<string>('');
+  const [isRosterOpen, setIsRosterOpen] = useState(false);
 
   // Thresholds for warning colors
   const isHelmLow = helms < 2; 
   const isNavLow = navs < 1; 
 
-  const handleOpen = (categoryKey: string, title: string) => {
-    if (roster && roster[categoryKey]) {
-      setSelectedCategory(categoryKey);
-      setModalTitle(title);
-    }
+  const handleOpen = () => {
+    if (roster) setIsRosterOpen(true);
   };
 
   const handleClose = () => {
-    setSelectedCategory(null);
+    setIsRosterOpen(false);
   };
 
-  const activeMembers = selectedCategory && roster ? roster[selectedCategory] : [];
+  const activeMembers: CrewMember[] = roster
+    ? Array.from(
+        new Map(
+          Object.values(roster)
+            .flat()
+            .map(member => [member.name.toLocaleLowerCase(), member]),
+        ).values(),
+      ).sort((a, b) => a.name.localeCompare(b.name))
+    : [];
 
   return (
     <>
       <div className="grid grid-cols-3 gap-2 mb-6 select-none">
         <button 
-          onClick={() => handleOpen(SECTION_HEADERS.COMMAND, 'Helms On Call')}
+          onClick={handleOpen}
           className={`p-2 rounded-xl border ${isHelmLow ? 'bg-red-900/20 border-red-800' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'} flex flex-col items-center justify-center transition-colors active:scale-95`}
         >
           <span className="text-xl font-bold text-white">{helms}</span>
@@ -43,7 +46,7 @@ export const SummaryStats: React.FC<SummaryProps> = ({ helms, navs, crew, roster
         </button>
         
         <button 
-          onClick={() => handleOpen(SECTION_HEADERS.NAVIGATOR, 'Tier 2 On Call')}
+          onClick={handleOpen}
           className={`p-2 rounded-xl border ${isNavLow ? 'bg-yellow-900/20 border-yellow-800' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'} flex flex-col items-center justify-center transition-colors active:scale-95`}
         >
           <span className="text-xl font-bold text-white">{navs}</span>
@@ -51,7 +54,7 @@ export const SummaryStats: React.FC<SummaryProps> = ({ helms, navs, crew, roster
         </button>
 
         <button 
-          onClick={() => handleOpen(SECTION_HEADERS.TIER1, 'Tier 1 / SOS On Call')}
+          onClick={handleOpen}
           className="p-2 rounded-xl border bg-slate-900 border-slate-800 hover:bg-slate-800 flex flex-col items-center justify-center transition-colors active:scale-95"
         >
           <span className="text-xl font-bold text-white">{crew}</span>
@@ -60,7 +63,7 @@ export const SummaryStats: React.FC<SummaryProps> = ({ helms, navs, crew, roster
       </div>
 
       {/* Popup Modal */}
-      {selectedCategory && (
+      {isRosterOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} />
           
@@ -68,7 +71,7 @@ export const SummaryStats: React.FC<SummaryProps> = ({ helms, navs, crew, roster
             <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Users className="w-5 h-5 text-rnli-orange" />
-                {modalTitle}
+                All Crew On Call ({activeMembers.length})
               </h3>
               <button onClick={handleClose} className="text-slate-400 hover:text-white transition-colors">
                 <X className="w-6 h-6" />
@@ -93,7 +96,7 @@ export const SummaryStats: React.FC<SummaryProps> = ({ helms, navs, crew, roster
                 </div>
               ) : (
                 <div className="text-center py-8 text-slate-500 italic">
-                  No crew members currently on call in this category.
+                  No crew members are currently on call.
                 </div>
               )}
             </div>

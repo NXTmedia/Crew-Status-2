@@ -21,6 +21,15 @@ export default {
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
+      keyframes: {
+        'current-hour-pulse': {
+          '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+          '50%': { transform: 'scale(1.08)', opacity: '0.55' },
+        },
+      },
+      animation: {
+        'current-hour': 'current-hour-pulse 1s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

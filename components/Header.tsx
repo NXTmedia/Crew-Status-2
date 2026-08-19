@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Anchor, RotateCw, CheckCircle2, AlertTriangle, XCircle, Settings, WifiOff, Database } from 'lucide-react';
+import { Anchor, RotateCw, CheckCircle2, AlertTriangle, XCircle, Settings, WifiOff } from 'lucide-react';
 import { formatTime, formatDateDisplay } from '../services/dateUtils';
 import { OperationalStatus } from '../types';
 
@@ -189,16 +189,12 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {(isOffline || isCachedData) && (
-              <div className={`mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-lg px-3 py-2 border ${
-                isOffline
-                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
-                  : 'bg-blue-500/10 border-blue-500/20 text-blue-300'
-              }`}>
-                {isOffline ? <WifiOff className="w-3.5 h-3.5" /> : <Database className="w-3.5 h-3.5" />}
+            {isOffline && (
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-lg px-3 py-2 border bg-amber-500/10 border-amber-500/20 text-amber-300">
+                <WifiOff className="w-3.5 h-3.5" />
                 <span>
-                  {isOffline ? 'Offline — showing saved roster' : 'Showing saved roster while refreshing'}
-                  {lastUpdated && ` · saved ${formatDateDisplay(lastUpdated)} at ${formatTime(lastUpdated)}`}
+                  {isCachedData ? 'Offline — showing saved roster' : 'Offline — no saved roster available'}
+                  {isCachedData && lastUpdated && ` · saved ${formatDateDisplay(lastUpdated)} at ${formatTime(lastUpdated)}`}
                 </span>
               </div>
             )}

@@ -58,9 +58,9 @@ export const StationForecastGrid: React.FC<StationForecastGridProps> = ({ foreca
                     <div 
                         className={`w-full aspect-[4/3] rounded-md border transition-all duration-200 flex items-center justify-center ${getColorClass(entry.status, isSelected)}`}
                     >
-                        {entry.status !== OperationalStatus.NO_DATA && isSelected && (
+                        {entry.status !== OperationalStatus.NO_DATA && (
                             <span className="text-slate-200 font-bold text-sm drop-shadow-md">
-                                {entry.totalCount}
+                                {entry.totalCount ?? 0}
                             </span>
                         )}
                     </div>
