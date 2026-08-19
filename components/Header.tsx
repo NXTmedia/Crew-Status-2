@@ -38,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   
   const displayDate = displayTime || new Date();
   const hasPersonalStatus = personalStatus !== undefined;
+  const hasRosterData = status !== undefined;
   const isOnCall = personalStatus === 2;
   // Use ReturnType<typeof setTimeout> for cross-environment compatibility (Node vs Browser types)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,8 +194,8 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-lg px-3 py-2 border bg-amber-500/10 border-amber-500/20 text-amber-300">
                 <WifiOff className="w-3.5 h-3.5" />
                 <span>
-                  {isCachedData ? 'Offline — showing saved roster' : 'Offline — no saved roster available'}
-                  {isCachedData && lastUpdated && ` · saved ${formatDateDisplay(lastUpdated)} at ${formatTime(lastUpdated)}`}
+                  {hasRosterData ? 'Offline — showing saved roster' : 'Offline — no saved roster available'}
+                  {hasRosterData && lastUpdated && ` · saved ${formatDateDisplay(lastUpdated)} at ${formatTime(lastUpdated)}`}
                 </span>
               </div>
             )}

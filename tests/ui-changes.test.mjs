@@ -74,17 +74,22 @@ test('the offline banner is visible only while the browser is offline', () => {
 
   const onlineText = renderHeader({
     isOffline: false,
-    isCachedData: true,
+    isCachedData: false,
+    status: OperationalStatus.GREEN,
     lastUpdated: savedAt,
   });
-  const offlineText = renderHeader({
+  const offlineLoadedText = renderHeader({
     isOffline: true,
-    isCachedData: true,
+    isCachedData: false,
+    status: OperationalStatus.GREEN,
     lastUpdated: savedAt,
   });
+  const offlineEmptyText = renderHeader({ isOffline: true });
 
   assert.doesNotMatch(onlineText, /Offline/);
-  assert.match(offlineText, /Offline — showing saved roster/);
+  assert.match(offlineLoadedText, /Offline — showing saved roster/);
+  assert.doesNotMatch(offlineLoadedText, /no saved roster available/);
+  assert.match(offlineEmptyText, /Offline — no saved roster available/);
 });
 
 test('every summary card opens the same complete on-call crew list', () => {
