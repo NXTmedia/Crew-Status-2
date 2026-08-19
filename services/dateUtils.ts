@@ -1,4 +1,30 @@
-import { format, subDays, getDay, addDays, startOfDay, isBefore } from 'date-fns';
+import { format, subDays, getDay, addDays, startOfDay, isSameDay } from 'date-fns';
+
+/**
+ * A roster day always contains 24 spreadsheet slots, even when the UK clocks
+ * change. Keep the calendar date and wall-clock hour separate so JavaScript's
+ * elapsed-time arithmetic cannot skip or repeat a spreadsheet column at DST.
+ */
+export const getRosterSlot = (baseDate: Date, offsetHours: number) => {
+  const totalHours = baseDate.getHours() + offsetHours;
+  const dayOffset = Math.floor(totalHours / 24);
+  const startHour = ((totalHours % 24) + 24) % 24;
+
+  return {
+    date: addDays(startOfDay(baseDate), dayOffset),
+    startHour,
+    endHour: (startHour + 1) % 24,
+  };
+};
+
+export const formatRosterHour = (hour: number): string =>
+  String(hour).padStart(2, '0');
+
+export const isCurrentRosterSlot = (
+  slotDate: Date,
+  startHour: number,
+  referenceDate: Date = new Date(),
+): boolean => isSameDay(slotDate, referenceDate) && startHour === referenceDate.getHours();
 
 /**
  * Get the Wednesday immediately preceding the given date.

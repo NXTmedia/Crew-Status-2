@@ -157,10 +157,10 @@ test('cache-only loading renders and recalculates personal status without networ
     assert.equal(atFourteenHundred.fetchedAt.getTime(), savedAt);
     assert.equal(atFourteenHundred.forecast.length, 24);
     assert.equal(atFourteenHundred.weekForecast.length, 168);
-    assert.equal(atFourteenHundred.weekForecast[0].time.getDay(), 3);
-    assert.equal(atFourteenHundred.weekForecast[0].time.getHours(), 0);
-    assert.equal(atFourteenHundred.weekForecast[167].time.getDay(), 2);
-    assert.equal(atFourteenHundred.weekForecast[167].time.getHours(), 23);
+    assert.equal(atFourteenHundred.weekForecast[0].date.getDay(), 3);
+    assert.equal(atFourteenHundred.weekForecast[0].startHour, 0);
+    assert.equal(atFourteenHundred.weekForecast[167].date.getDay(), 2);
+    assert.equal(atFourteenHundred.weekForecast[167].startHour, 23);
     assert.equal(atFourteenHundred.personalForecast[0].status, 2);
     assert.equal(atFifteenHundred.personalForecast[0].status, 0);
   } finally {

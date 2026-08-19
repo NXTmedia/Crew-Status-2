@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { ForecastEntry, OperationalStatus } from '../types';
-import { format, addHours } from 'date-fns';
+import { formatRosterHour } from '../services/dateUtils';
 
 interface StatusTimelineProps {
   forecast: ForecastEntry[];
@@ -46,7 +46,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ forecast }) => {
             </div>
             {/* Increment hour by 1 for display as requested, handling 23->00 rollover */}
             <span className="text-[9px] text-slate-500 font-mono">
-                {format(addHours(entry.time, 1), 'HH')}
+                {formatRosterHour(entry.endHour)}
             </span>
             </div>
         ))}

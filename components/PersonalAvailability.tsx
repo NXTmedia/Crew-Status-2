@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PersonalForecastEntry } from '../types';
 import { UserCheck, AlertCircle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { format, addDays, addHours, isSameDay, startOfDay, isBefore, isAfter, isSameHour } from 'date-fns';
+import { format, addDays, isSameDay, startOfDay } from 'date-fns';
 import { fetchPersonalSchedule } from '../services/sheetService';
-import { getAvailabilityDateRange, getLastWednesday } from '../services/dateUtils';
+import { formatRosterHour, getAvailabilityDateRange, getLastWednesday, isCurrentRosterSlot } from '../services/dateUtils';
 
 interface PersonalAvailabilityProps {
   crewName: string;
@@ -181,9 +181,9 @@ export const PersonalAvailability: React.FC<PersonalAvailabilityProps> = ({ crew
       <div className="grid grid-cols-6 gap-2">
         {data.map((entry, idx) => {
           const isAvailable = entry.status === 2;
-          const startHour = format(entry.time, 'HH');
-          const endHour = format(addHours(entry.time, 1), 'HH');
-          const isCurrentHour = isSameHour(entry.time, now);
+          const startHour = formatRosterHour(entry.startHour);
+          const endHour = formatRosterHour(entry.endHour);
+          const isCurrentHour = isCurrentRosterSlot(entry.date, entry.startHour, now);
 
           return (
             <div key={idx} className="flex flex-col gap-1 relative">

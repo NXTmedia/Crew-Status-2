@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from '../components/Header';
 import { TimeControls } from '../components/TimeControls';
 import { StatusTimeline } from '../components/StatusTimeline';
@@ -11,9 +11,15 @@ import { AppState, LoadStatus } from '../types';
 import { CONFIG } from '../config';
 import { ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { SingleFlightLatestQueue } from '../services/singleFlightQueue';
 
 const CREW_NAME_KEY = 'RNLI_CREW_NAME';
 const LA_VIEW_KEY = 'RNLI_LA_VIEW';
+
+interface CrewRefreshRequest {
+  target: Date;
+  nameToFetch: string;
+}
 
 export const CrewDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -68,15 +74,17 @@ export const CrewDashboard: React.FC = () => {
     navigate('/station');
   };
 
-  const refreshData = useCallback(async (target: Date, nameOverride?: string) => {
-    const nameToFetch = nameOverride !== undefined ? nameOverride : crewName;
-
+  const performRefresh = useCallback(async (
+    { target, nameToFetch }: CrewRefreshRequest,
+    refreshSignal: AbortSignal,
+  ) => {
     let loadedCachedRoster = false;
 
     // Render the last saved roster first. This is intentionally cache-only so
     // startup never waits for a network timeout before showing on-call status.
     try {
-      const cachedResult = await fetchRosterData(target, nameToFetch, 'cache-only');
+      const cachedResult = await fetchRosterData(target, nameToFetch, 'cache-only', refreshSignal);
+      if (refreshSignal.aborted) return;
       loadedCachedRoster = true;
       setState({
         status: LoadStatus.SUCCESS,
@@ -85,6 +93,7 @@ export const CrewDashboard: React.FC = () => {
         targetDate: target,
       });
     } catch (error) {
+      if (refreshSignal.aborted) return;
       console.debug('No matching saved roster is available', error);
     }
 
@@ -110,7 +119,8 @@ export const CrewDashboard: React.FC = () => {
     }));
 
     try {
-      const networkResult = await fetchRosterData(target, nameToFetch, 'network-first');
+      const networkResult = await fetchRosterData(target, nameToFetch, 'network-first', refreshSignal);
+      if (refreshSignal.aborted) return;
       setState({
         status: LoadStatus.SUCCESS,
         data: networkResult,
@@ -118,6 +128,7 @@ export const CrewDashboard: React.FC = () => {
         targetDate: target,
       });
     } catch (err: any) {
+      if (refreshSignal.aborted) return;
       console.error("Network fetch failed", err);
       setState(prev => {
         if (prev.data) {
@@ -134,7 +145,28 @@ export const CrewDashboard: React.FC = () => {
         };
       });
     }
+  }, []);
+
+  const performRefreshRef = useRef(performRefresh);
+  performRefreshRef.current = performRefresh;
+  const refreshQueueRef = useRef<SingleFlightLatestQueue<CrewRefreshRequest> | null>(null);
+  if (!refreshQueueRef.current) {
+    refreshQueueRef.current = new SingleFlightLatestQueue(
+      (request, signal) => performRefreshRef.current(request, signal),
+    );
+  }
+
+  const refreshData = useCallback((target: Date, nameOverride?: string) => {
+    void refreshQueueRef.current?.enqueue({
+      target,
+      nameToFetch: nameOverride !== undefined ? nameOverride : crewName,
+    });
   }, [crewName]);
+
+  useEffect(() => {
+    refreshQueueRef.current?.resume();
+    return () => refreshQueueRef.current?.stop();
+  }, []);
 
   // Initial load
   useEffect(() => {

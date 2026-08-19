@@ -59,11 +59,13 @@ const renderHeader = props => {
 };
 
 const createWeekForecast = () => Array.from({ length: 168 }, (_, hour) => {
-  const time = new Date(2026, 7, 19, 0);
-  time.setHours(time.getHours() + hour);
+  const date = new Date(2026, 7, 19 + Math.floor(hour / 24));
+  const startHour = hour % 24;
   return {
-    time,
-    label: `${String(time.getHours()).padStart(2, '0')}:00`,
+    date,
+    startHour,
+    endHour: (startHour + 1) % 24,
+    label: `${String(startHour).padStart(2, '0')}:00`,
     status: hour % 3 === 0 ? OperationalStatus.GREEN : OperationalStatus.ORANGE,
     totalCount: (hour % 8) + 1,
   };
@@ -138,13 +140,17 @@ test('every summary card opens the same complete on-call crew list', () => {
 test('station forecast counts remain visible for selected and unselected hours', () => {
   const forecast = [
     {
-      time: new Date(2026, 7, 19, 14, 0),
+    date: new Date(2026, 7, 19),
+    startHour: 14,
+    endHour: 15,
       label: '14:00',
       status: OperationalStatus.ORANGE,
       totalCount: 4,
     },
     {
-      time: new Date(2026, 7, 19, 15, 0),
+    date: new Date(2026, 7, 19),
+    startHour: 15,
+    endHour: 16,
       label: '15:00',
       status: OperationalStatus.GREEN,
       totalCount: 9,
@@ -182,8 +188,8 @@ test('seven-day filtering removes days before today and always ends on Tuesday',
   );
 
   assert.equal(visibleDays.length, 5);
-  assert.equal(visibleDays[0][0].time.getDay(), 5);
-  assert.equal(visibleDays.at(-1)[0].time.getDay(), 2);
+  assert.equal(visibleDays[0][0].date.getDay(), 5);
+  assert.equal(visibleDays.at(-1)[0].date.getDay(), 2);
 });
 
 test('LA View toggles to a labelled two-row-per-day forecast', () => {
@@ -242,13 +248,17 @@ test('LA View toggles to a labelled two-row-per-day forecast', () => {
 test('compact station forecast shows crew counts by default', () => {
   const forecast = [
     {
-      time: new Date(2026, 7, 19, 14, 0),
+      date: new Date(2026, 7, 19),
+      startHour: 14,
+      endHour: 15,
       label: '14:00',
       status: OperationalStatus.ORANGE,
       totalCount: 4,
     },
     {
-      time: new Date(2026, 7, 19, 15, 0),
+      date: new Date(2026, 7, 19),
+      startHour: 15,
+      endHour: 16,
       label: '15:00',
       status: OperationalStatus.GREEN,
       totalCount: 9,

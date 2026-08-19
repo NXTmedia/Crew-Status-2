@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from '../components/Header';
 import { TimeControls } from '../components/TimeControls';
 import { ForecastView, StationForecastGrid } from '../components/StationForecastGrid';
@@ -11,7 +11,8 @@ import { AppState, LoadStatus } from '../types';
 import { CONFIG } from '../config';
 import { ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { format, addHours } from 'date-fns';
+import { formatRosterHour } from '../services/dateUtils';
+import { SingleFlightLatestQueue } from '../services/singleFlightQueue';
 
 const CREW_NAME_KEY = 'RNLI_CREW_NAME';
 const LA_VIEW_KEY = 'RNLI_LA_VIEW';
@@ -58,11 +59,12 @@ export const StationDashboard: React.FC = () => {
     navigate('/');
   };
 
-  const refreshData = useCallback(async (target: Date) => {
+  const performRefresh = useCallback(async (target: Date, refreshSignal: AbortSignal) => {
     let loadedCachedRoster = false;
 
     try {
-      const cachedResult = await fetchRosterData(target, '', 'cache-only');
+      const cachedResult = await fetchRosterData(target, '', 'cache-only', refreshSignal);
+      if (refreshSignal.aborted) return;
       loadedCachedRoster = true;
       setState({
         status: LoadStatus.SUCCESS,
@@ -71,6 +73,7 @@ export const StationDashboard: React.FC = () => {
         targetDate: target,
       });
     } catch (error) {
+      if (refreshSignal.aborted) return;
       console.debug('No matching saved roster is available', error);
     }
 
@@ -96,7 +99,8 @@ export const StationDashboard: React.FC = () => {
     }));
 
     try {
-      const networkResult = await fetchRosterData(target, '', 'network-first');
+      const networkResult = await fetchRosterData(target, '', 'network-first', refreshSignal);
+      if (refreshSignal.aborted) return;
       setState({
         status: LoadStatus.SUCCESS,
         data: networkResult,
@@ -104,6 +108,7 @@ export const StationDashboard: React.FC = () => {
         targetDate: target,
       });
     } catch (err: any) {
+      if (refreshSignal.aborted) return;
       console.error("Network fetch failed", err);
       setState(prev => {
         if (prev.data) {
@@ -120,6 +125,24 @@ export const StationDashboard: React.FC = () => {
         };
       });
     }
+  }, []);
+
+  const performRefreshRef = useRef(performRefresh);
+  performRefreshRef.current = performRefresh;
+  const refreshQueueRef = useRef<SingleFlightLatestQueue<Date> | null>(null);
+  if (!refreshQueueRef.current) {
+    refreshQueueRef.current = new SingleFlightLatestQueue(
+      (target, signal) => performRefreshRef.current(target, signal),
+    );
+  }
+
+  const refreshData = useCallback((target: Date) => {
+    void refreshQueueRef.current?.enqueue(target);
+  }, []);
+
+  useEffect(() => {
+    refreshQueueRef.current?.resume();
+    return () => refreshQueueRef.current?.stop();
   }, []);
 
   useEffect(() => {
@@ -202,9 +225,9 @@ export const StationDashboard: React.FC = () => {
 
   // Derived data for display
   const selectedRoster = state.data?.hourlyRosters?.[selectedHourIndex] || state.data?.roster;
-  const selectedTime = state.data?.forecast?.[selectedHourIndex]?.time || now;
+  const selectedEntry = state.data?.forecast?.[selectedHourIndex];
   // Format label for "Hour Ending XX:00"
-  const timeLabel = format(addHours(selectedTime, 1), 'HH:00');
+  const timeLabel = `${formatRosterHour(selectedEntry?.endHour ?? ((now.getHours() + 1) % 24))}:00`;
 
   return (
     <>

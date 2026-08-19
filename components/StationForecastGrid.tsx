@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { ForecastEntry, OperationalStatus } from '../types';
-import { format, addHours, isBefore, isSameHour, startOfDay } from 'date-fns';
+import { format, isBefore, startOfDay } from 'date-fns';
+import { formatRosterHour, isCurrentRosterSlot } from '../services/dateUtils';
 
 interface StationForecastGridProps {
   forecast: ForecastEntry[];
@@ -18,7 +19,7 @@ export const getVisibleWeekDays = (weekForecast: ForecastEntry[], referenceDate:
   return Array.from({ length: 7 }, (_, day) =>
     weekForecast.slice(day * 24, (day + 1) * 24),
   ).filter(entries =>
-    entries.length === 24 && !isBefore(startOfDay(entries[0].time), today),
+    entries.length === 24 && !isBefore(startOfDay(entries[0].date), today),
   );
 };
 
@@ -124,7 +125,7 @@ export const StationForecastGrid: React.FC<StationForecastGridProps> = ({
                           </div>
                           {/* Increment hour by 1 for display as requested, handling 23->00 rollover */}
                           <span className={`text-[9px] font-mono transition-colors ${isSelected ? 'text-white font-bold' : 'text-slate-500 group-hover:text-slate-300'}`}>
-                              {format(addHours(entry.time, 1), 'HH')}
+                              {formatRosterHour(entry.endHour)}
                           </span>
                       </button>
                   );
@@ -135,7 +136,7 @@ export const StationForecastGrid: React.FC<StationForecastGridProps> = ({
           <div key="weekly-7-days" className="space-y-3 isolate" data-testid="week-forecast-grid">
             {weekDays.map((entries, dayIndex) => {
               if (entries.length !== 24) return null;
-              const dayDate = entries[0].time;
+              const dayDate = entries[0].date;
               return (
                 <section key={dayIndex}>
                   <div className="flex items-baseline justify-between mb-1 px-1">
@@ -146,13 +147,13 @@ export const StationForecastGrid: React.FC<StationForecastGridProps> = ({
                   </div>
                   <div className="grid grid-cols-12 gap-x-1 gap-y-2" data-week-day-grid>
                     {entries.map((entry, hourIndex) => {
-                      const isCurrentHour = isSameHour(entry.time, new Date());
-                      const hourEnding = format(addHours(entry.time, 1), 'HH');
+                      const isCurrentHour = isCurrentRosterSlot(entry.date, entry.startHour);
+                      const hourEnding = formatRosterHour(entry.endHour);
                       return (
                         <div
                           key={hourIndex}
                           data-week-hour
-                          aria-label={`${format(entry.time, 'EEEE')}, hour ending ${hourEnding}:00 — ${entry.status}, ${entry.totalCount ?? 0} crew`}
+                          aria-label={`${format(entry.date, 'EEEE')}, hour ending ${hourEnding}:00 — ${entry.status}, ${entry.totalCount ?? 0} crew`}
                           title={`Hour ending ${hourEnding}:00 — ${entry.totalCount ?? 0} crew`}
                           className="flex min-w-0 flex-col items-center gap-1"
                         >

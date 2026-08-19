@@ -1,9 +1,9 @@
 
 import Papa from 'papaparse';
-import { differenceInCalendarDays, format, addHours, startOfDay, addDays } from 'date-fns';
+import { differenceInCalendarDays, format, startOfDay, addDays } from 'date-fns';
 import { SECTION_HEADERS, VALID_COLUMN_B_FLAG, ON_CALL_STATUS_CODE, PARSER_STOP_TRIGGER, PROBATIONER_HEADER } from '../constants';
 import { CONFIG } from '../config';
-import { canViewRosterWeek, generatePossibleTabNames, getLastWednesday } from './dateUtils';
+import { canViewRosterWeek, formatRosterHour, generatePossibleTabNames, getLastWednesday, getRosterSlot } from './dateUtils';
 import { RosterData, SheetParseResult, DebugInfo, OperationalStatus, ForecastEntry, PersonalForecastEntry } from '../types';
 
 interface FetchResult {
@@ -129,25 +129,45 @@ export const isRosterForDate = (csvData: any[], targetDate: Date): boolean => {
 
 const FETCH_TIMEOUT_MS = 8000;
 
-const fetchCSV = async (sheetName: string): Promise<{ data: any[], rawSnippet: string, csvText: string }> => {
+const throwIfRefreshAborted = (signal?: AbortSignal) => {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException('Refresh superseded', 'AbortError');
+  }
+};
+
+const fetchCSV = async (
+  sheetName: string,
+  refreshSignal?: AbortSignal,
+): Promise<{ data: any[], rawSnippet: string, csvText: string }> => {
   // A stable URL lets the service worker keep a second, browser-managed copy.
   // `no-cache` still revalidates it whenever the network is available.
   const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, FETCH_TIMEOUT_MS);
+  const cancelSupersededRequest = () => controller.abort(refreshSignal?.reason);
+
+  throwIfRefreshAborted(refreshSignal);
+  refreshSignal?.addEventListener('abort', cancelSupersededRequest, { once: true });
 
   let response: Response;
   try {
     response = await fetch(url, { signal: controller.signal, cache: 'no-cache' });
   } catch (e: any) {
-    clearTimeout(timeoutId);
-    if (e.name === 'AbortError') {
+    if (e.name === 'AbortError' && timedOut) {
       throw new Error(`Fetch timed out for sheet: ${sheetName}`);
     }
     throw e;
+  } finally {
+    clearTimeout(timeoutId);
+    refreshSignal?.removeEventListener('abort', cancelSupersededRequest);
   }
-  clearTimeout(timeoutId);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch sheet: ${sheetName} (Status: ${response.status})`);
@@ -159,6 +179,7 @@ const fetchCSV = async (sheetName: string): Promise<{ data: any[], rawSnippet: s
   }
   const rawSnippet = text.split('\n').slice(0, 10).join('\n');
   const data = await parseCSV(text);
+  throwIfRefreshAborted(refreshSignal);
 
   return { data, rawSnippet, csvText: text };
 };
@@ -199,8 +220,10 @@ const calculateOperationalStatus = (helms: number, navs: number, total: number):
  */
 const loadCsvForDate = async (
   targetDate: Date,
-  mode: RosterLoadMode = 'network-first'
+  mode: RosterLoadMode = 'network-first',
+  refreshSignal?: AbortSignal,
 ): Promise<CsvLoadResult> => {
+  throwIfRefreshAborted(refreshSignal);
   const potentialSheetNames = generatePossibleTabNames(targetDate);
   let csvData: any[] | null = null;
   let rawSnippet = '';
@@ -210,11 +233,13 @@ const loadCsvForDate = async (
 
   const loadMatchingCache = async (): Promise<boolean> => {
     for (const potentialName of potentialSheetNames) {
+      throwIfRefreshAborted(refreshSignal);
       const cached = findCacheEntry([potentialName]);
       if (!cached) continue;
 
       try {
         const parsedData = await parseCSV(cached.csvText);
+        throwIfRefreshAborted(refreshSignal);
         if (!isRosterForDate(parsedData, targetDate)) {
           console.warn(`Discarding cached roster with mismatched dates: ${cached.sheetName}`);
           removeFromCache(cached.sheetName);
@@ -228,6 +253,7 @@ const loadCsvForDate = async (
         isCached = true;
         return true;
       } catch (error) {
+        if (refreshSignal?.aborted) throw error;
         console.error('Failed to parse cached roster data', error);
         removeFromCache(cached.sheetName);
       }
@@ -250,8 +276,9 @@ const loadCsvForDate = async (
 
   if (!browserIsOffline) {
     for (const name of potentialSheetNames) {
+      throwIfRefreshAborted(refreshSignal);
       try {
-        const result = await fetchCSV(name);
+        const result = await fetchCSV(name, refreshSignal);
         if (!isRosterForDate(result.data, targetDate)) {
           throw new Error(`Worksheet dates do not match requested roster: ${name}`);
         }
@@ -262,6 +289,7 @@ const loadCsvForDate = async (
         saveToCache(name, result.csvText);
         break;
       } catch (error) {
+        if (refreshSignal?.aborted) throw error;
         console.warn(`Failed to fetch tab "${name}":`, error);
       }
     }
@@ -335,11 +363,13 @@ export const fetchPersonalSchedule = async (
       for (let h = 0; h < 24; h++) {
         const targetColIndex = baseColumnIndex + h;
         const val = row[targetColIndex]?.toString().trim();
-        const hourTime = addHours(startOfDayDate, h);
+        const slot = getRosterSlot(startOfDayDate, h);
 
         personalForecast.push({
-            time: hourTime,
-            hourLabel: format(hourTime, 'HH'),
+            date: slot.date,
+            startHour: slot.startHour,
+            endHour: slot.endHour,
+            hourLabel: formatRosterHour(slot.startHour),
             status: val === ON_CALL_STATUS_CODE ? 2 : 0
         });
       }
@@ -460,10 +490,12 @@ const parseSheetRows = (ctx: RowParseContext): boolean => {
           if (sheetCol < ROSTER_START_COL_INDEX || sheetCol >= ROSTER_END_COL_INDEX) continue;
 
           const val = row[sheetCol]?.toString().trim();
-          const hourTime = addHours(ctx.targetDate, h);
+          const slot = getRosterSlot(ctx.targetDate, h);
           ctx.personalForecast.push({
-            time: hourTime,
-            hourLabel: format(hourTime, 'HH'),
+            date: slot.date,
+            startHour: slot.startHour,
+            endHour: slot.endHour,
+            hourLabel: formatRosterHour(slot.startHour),
             status: val === ON_CALL_STATUS_CODE ? 2 : 0
           });
         }
@@ -477,9 +509,11 @@ const parseSheetRows = (ctx: RowParseContext): boolean => {
 export const fetchRosterData = async (
   targetDate: Date,
   crewName?: string,
-  mode: RosterLoadMode = 'network-first'
+  mode: RosterLoadMode = 'network-first',
+  refreshSignal?: AbortSignal,
 ): Promise<SheetParseResult> => {
-  const { csvData, usedSheetName, rawSnippet, isCached, sourceTimestamp } = await loadCsvForDate(targetDate, mode);
+  const { csvData, usedSheetName, rawSnippet, isCached, sourceTimestamp } = await loadCsvForDate(targetDate, mode, refreshSignal);
+  throwIfRefreshAborted(refreshSignal);
 
   // Calculate Column Logic
   const rotationStart = getLastWednesday(targetDate);
@@ -557,9 +591,10 @@ export const fetchRosterData = async (
   if (needsNextWeekNow) {
     try {
       const nextMode: RosterLoadMode = isCached ? 'cache-only' : mode;
-      const nextResult = await loadCsvForDate(nextWed, nextMode);
+      const nextResult = await loadCsvForDate(nextWed, nextMode, refreshSignal);
       nextCsvData = nextResult.csvData;
     } catch (e) {
+      if (refreshSignal?.aborted) throw e;
       // Next week's sheet doesn't exist yet — that's fine
       console.debug("Next week sheet not available:", e);
     }
@@ -593,14 +628,16 @@ export const fetchRosterData = async (
 
   const forecast: ForecastEntry[] = forecastAccumulators.map((acc, idx) => {
     const targetColIndex = columnIndex + idx;
-    const time = addHours(targetDate, idx);
-    const label = format(time, 'HH:mm');
+    const slot = getRosterSlot(targetDate, idx);
+    const label = `${formatRosterHour(slot.startHour)}:00`;
 
     // End of week: show NO_DATA only if stitching didn't populate this hour
     if (targetColIndex >= ROSTER_END_COL_INDEX) {
         if (acc.total === 0 && acc.helms === 0 && acc.navs === 0) {
             return {
-                time,
+                date: slot.date,
+                startHour: slot.startHour,
+                endHour: slot.endHour,
                 label,
                 status: OperationalStatus.NO_DATA,
                 totalCount: 0
@@ -609,7 +646,9 @@ export const fetchRosterData = async (
     }
 
     return {
-      time,
+      date: slot.date,
+      startHour: slot.startHour,
+      endHour: slot.endHour,
       label,
       status: calculateOperationalStatus(acc.helms, acc.navs, acc.total),
       totalCount: acc.total
@@ -637,10 +676,12 @@ export const fetchRosterData = async (
   });
 
   const weekForecast: ForecastEntry[] = weekForecastAccumulators.map((acc, hour) => {
-    const time = addHours(rotationStart, hour);
+    const slot = getRosterSlot(rotationStart, hour);
     return {
-      time,
-      label: format(time, 'HH:mm'),
+      date: slot.date,
+      startHour: slot.startHour,
+      endHour: slot.endHour,
+      label: `${formatRosterHour(slot.startHour)}:00`,
       status: calculateOperationalStatus(acc.helms, acc.navs, acc.total),
       totalCount: acc.total,
     };

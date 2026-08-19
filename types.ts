@@ -35,14 +35,18 @@ export enum OperationalStatus {
 }
 
 export interface ForecastEntry {
-  time: Date;
+  date: Date; // Calendar date for this fixed spreadsheet slot
+  startHour: number; // Wall-clock hour represented by the source column
+  endHour: number;
   status: OperationalStatus;
   label: string; // e.g., "14:00"
   totalCount?: number; // Total crew count for this hour
 }
 
 export interface PersonalForecastEntry {
-  time: Date;
+  date: Date;
+  startHour: number;
+  endHour: number;
   hourLabel: string;
   status: number; // 2 = Available, 0/Other = Unavailable
 }
