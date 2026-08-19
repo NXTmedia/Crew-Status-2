@@ -229,7 +229,7 @@ export const CrewDashboard: React.FC = () => {
         isCachedData={state.data?.isCachedData}
         showSettings={true}
         showPersonalStatus={true}
-        title="Cruise Status 2"
+        title="Crew Status 2"
       />
 
       {state.status === LoadStatus.ERROR && (

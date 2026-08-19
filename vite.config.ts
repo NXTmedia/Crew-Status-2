@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Cruise Status 2',
-        short_name: 'Cruise Status 2',
+        name: 'Crew Status 2',
+        short_name: 'Crew Status 2',
         description: 'Fast, offline-ready crew availability and station status.',
         theme_color: '#0f172a',
         background_color: '#020617',
@@ -42,7 +42,7 @@ export default defineConfig({
               url.pathname.includes('/spreadsheets/d/'),
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'cruise-status-rosters',
+              cacheName: 'crew-status-rosters',
               networkTimeoutSeconds: 5,
               cacheableResponse: {
                 statuses: [0, 200],

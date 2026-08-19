@@ -1,4 +1,4 @@
-# Cruise Status 2
+# Crew Status 2
 
 ## Version Management
 

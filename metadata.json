@@ -1,5 +1,5 @@
 {
-  "name": "Cruise Status 2",
+  "name": "Crew Status 2",
   "description": "Real-time availability status board for individual RNLI Teddington crew, visualizing on-call status from station rosters.",
   "requestFramePermissions": []
 }

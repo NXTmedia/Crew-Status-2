@@ -204,7 +204,7 @@ test('the service worker retains a network-first Google roster cache', () => {
   const serviceWorker = readDistFile('sw.js');
 
   assert.match(serviceWorker, /https:\/\/docs\.google\.com/);
-  assert.match(serviceWorker, /cruise-status-rosters/);
+  assert.match(serviceWorker, /crew-status-rosters/);
   assert.match(serviceWorker, /NetworkFirst/);
   assert.match(serviceWorker, /networkTimeoutSeconds:5/);
 });
@@ -215,6 +215,6 @@ test('the production shell has no internet-hosted UI dependencies', () => {
 
   assert.doesNotMatch(indexHtml, /cdn\.tailwindcss|fonts\.googleapis|aistudiocdn|placehold\.co/);
   assert.match(indexHtml, /assets\/index-[A-Za-z0-9_-]+\.css/);
-  assert.equal(manifest.name, 'Cruise Status 2');
+  assert.equal(manifest.name, 'Crew Status 2');
   assert.equal(manifest.icons.every(icon => icon.src.startsWith('/')), true);
 });

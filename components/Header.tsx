@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   isCachedData = false,
   showPersonalStatus = true,
   showSettings = true,
-  title = "Cruise Status 2"
+  title = "Crew Status 2"
 }) => {
   
   const displayDate = displayTime || new Date();
