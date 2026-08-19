@@ -27,3 +27,11 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Itgwob3jnklCGp1snQWvYM
 - When connectivity returns, the app refreshes the saved roster automatically.
 
 At least one successful online visit is required before roster data can be shown offline.
+
+## Tests
+
+Run the production build and offline test suite with:
+
+`npm test`
+
+The tests verify cache-only roster rendering, hourly on-call recalculation, offline fallback without network requests, missing-cache behaviour, application-shell precaching, and removal of internet-hosted UI dependencies.
