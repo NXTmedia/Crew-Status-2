@@ -159,6 +159,14 @@ test('station forecast counts remain visible for selected and unselected hours',
   const text = flattenText(component.toJSON());
   assert.match(text, /\b4\b/);
   assert.match(text, /\b9\b/);
+
+  const selectedTile = component.root.find(node =>
+    typeof node.props.className === 'string' &&
+    node.props.className.includes('aspect-[4/3]') &&
+    node.props.className.includes('border-white'),
+  );
+  assert.match(selectedTile.props.className, /border-2/);
+  assert.doesNotMatch(selectedTile.props.className, /ring-/);
   act(() => component.unmount());
 });
 
@@ -262,7 +270,7 @@ test('compact station forecast shows crew counts by default', () => {
   act(() => component.unmount());
 });
 
-test('the current availability hour uses a pulsing white border once per second', () => {
+test('the current availability hour uses a pulsing white border every two seconds', () => {
   const currentHourClass = getAvailabilityBoxClass(true, true);
   const cssAsset = readdirSync(resolve(process.cwd(), 'dist', 'assets'))
     .find(name => /^index-[A-Za-z0-9_-]+\.css$/.test(name));
@@ -271,6 +279,6 @@ test('the current availability hour uses a pulsing white border once per second'
   assert.match(currentHourClass, /animate-current-hour/);
   assert.match(currentHourClass, /border-2/);
   assert.match(currentHourClass, /border-white/);
-  assert.match(compiledCss, /\.animate-current-hour\{animation:current-hour-pulse 1s ease-in-out infinite\}/);
+  assert.match(compiledCss, /\.animate-current-hour\{animation:current-hour-pulse 2s ease-in-out infinite\}/);
   assert.match(compiledCss, /@keyframes current-hour-pulse\{0%,to\{border-color:#fff;box-shadow:0 0 #ffffffb3\}50%\{border-color:#ffffff80;box-shadow:0 0 0 6px #fff0\}\}/);
 });

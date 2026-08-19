@@ -34,7 +34,7 @@ export default {
         },
       },
       animation: {
-        'current-hour': 'current-hour-pulse 1s ease-in-out infinite',
+        'current-hour': 'current-hour-pulse 2s ease-in-out infinite',
       },
     },
   },

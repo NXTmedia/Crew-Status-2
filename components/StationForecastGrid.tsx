@@ -52,7 +52,9 @@ export const StationForecastGrid: React.FC<StationForecastGridProps> = ({
     }
 
     if (isSelected) {
-        return `${base} ring-2 ring-white ring-offset-2 ring-offset-slate-950 z-10`;
+        // Use a real border instead of Tailwind's box-shadow based ring. Safari
+        // can retain a clipped ring layer after switching forecast layouts.
+        return `${base} border-2 !border-white z-10`;
     }
     
     return `${base} opacity-90`;
@@ -102,7 +104,7 @@ export const StationForecastGrid: React.FC<StationForecastGridProps> = ({
           <>
             <div className="text-right text-[9px] text-slate-600 italic mb-2 px-1">Select an hour to view roster</div>
             {/* 4 Rows of 6 Hours */}
-            <div className="grid grid-cols-6 gap-2">
+            <div key="rolling-24-hours" className="grid grid-cols-6 gap-2 isolate">
               {forecast.slice(0, 24).map((entry, idx) => {
                   const isSelected = idx === selectedIndex;
                   return (
@@ -130,7 +132,7 @@ export const StationForecastGrid: React.FC<StationForecastGridProps> = ({
             </div>
           </>
         ) : (
-          <div className="space-y-3" data-testid="week-forecast-grid">
+          <div key="weekly-7-days" className="space-y-3 isolate" data-testid="week-forecast-grid">
             {weekDays.map((entries, dayIndex) => {
               if (entries.length !== 24) return null;
               const dayDate = entries[0].time;
