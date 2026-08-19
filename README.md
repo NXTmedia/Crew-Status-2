@@ -1,37 +1,41 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Crew Status 2
 
-# Run and deploy your AI Studio app
+An offline-ready dashboard for viewing station crewing levels, personal availability, and Wednesday-to-Tuesday roster forecasts.
 
-This contains everything you need to run your app locally.
+## Local development
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Itgwob3jnklCGp1snQWvYMpesKdNqEcj
+Prerequisites: Node.js 20 or newer.
 
-## Run Locally
+```bash
+npm install
+npm run dev
+```
 
-**Prerequisites:**  Node.js
+The local preview is served by Vite. No API key or environment file is required.
 
+## Production build
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+npm run build
+npm test
+```
+
+The production site is generated in `dist/`.
 
 ## Offline behaviour
 
 - The application shell, icons, JavaScript, and CSS are precached after the first successful visit.
-- The most recent roster CSV is saved locally and rendered before a network refresh is attempted.
-- Current and upcoming roster weeks are retained so the on-call view can be recalculated as time advances.
+- The most recent validated roster CSV is saved locally and rendered before a network refresh is attempted.
+- Validated current and upcoming roster weeks are retained so the on-call view can be recalculated as time advances.
+- The following Wednesday-to-Tuesday roster becomes available on Tuesday, once its worksheet date headers match the requested week.
 - When connectivity returns, the app refreshes the saved roster automatically.
 
 At least one successful online visit is required before roster data can be shown offline.
 
+## Netlify
+
+The included `netlify.toml` configures Netlify to run `npm run build` and publish `dist/`. Import the GitHub repository into Netlify; no environment variables are required.
+
 ## Tests
 
-Run the production build and offline test suite with:
-
-`npm test`
-
-The tests verify cache-only roster rendering, hourly on-call recalculation, offline fallback without network requests, missing-cache behaviour, application-shell precaching, and removal of internet-hosted UI dependencies.
+`npm test` builds the production PWA and runs the offline, roster-boundary, and UI regression suites.

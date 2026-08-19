@@ -58,6 +58,7 @@ export interface SheetParseResult {
     status: OperationalStatus;
   };
   forecast: ForecastEntry[];
+  weekForecast: ForecastEntry[]; // Full Wednesday-Tuesday roster overview
   personalForecast: PersonalForecastEntry[];
   crewNameFound: boolean;
   fetchedAt: Date;

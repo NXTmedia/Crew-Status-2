@@ -4,7 +4,7 @@ import { PersonalForecastEntry } from '../types';
 import { UserCheck, AlertCircle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { format, addDays, addHours, isSameDay, startOfDay, isBefore, isAfter, isSameHour } from 'date-fns';
 import { fetchPersonalSchedule } from '../services/sheetService';
-import { getLastWednesday } from '../services/dateUtils';
+import { getAvailabilityDateRange, getLastWednesday } from '../services/dateUtils';
 
 interface PersonalAvailabilityProps {
   crewName: string;
@@ -33,9 +33,9 @@ export const PersonalAvailability: React.FC<PersonalAvailabilityProps> = ({ crew
   const [nextWeekUnavailable, setNextWeekUnavailable] = useState(false);
 
   // Calculate Roster Boundaries (Wed - Next Tue)
-  const today = startOfDay(new Date());
-  const minDate = getLastWednesday(today); // Current Roster Start (Wed)
-  const maxDate = addDays(minDate, 13);    // Next Roster End (next Tue)
+  const today = startOfDay(now);
+  const { minDate, maxDate } = getAvailabilityDateRange(today);
+  const canPreviewNextWeek = maxDate.getTime() > addDays(minDate, 6).getTime();
 
   const isAtStart = isSameDay(viewDate, minDate);
   const isAtEnd = isSameDay(viewDate, maxDate);
@@ -249,7 +249,9 @@ export const PersonalAvailability: React.FC<PersonalAvailabilityProps> = ({ crew
         {renderGridContent()}
       </div>
       <div className="text-center mt-2 text-[10px] text-slate-600">
-        Swipe left/right to change days
+        {isAtEnd && !canPreviewNextWeek
+          ? 'Next week will be available from Tuesday'
+          : 'Swipe left/right to change days'}
       </div>
     </div>
   );

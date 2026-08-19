@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '../components/Header';
 import { TimeControls } from '../components/TimeControls';
-import { StationForecastGrid } from '../components/StationForecastGrid';
+import { ForecastView, StationForecastGrid } from '../components/StationForecastGrid';
 import { ActiveCrewList } from '../components/ActiveCrewList';
 import { SummaryStats } from '../components/SummaryStats';
 import { SettingsModal } from '../components/SettingsModal';
@@ -21,6 +21,7 @@ export const StationDashboard: React.FC = () => {
   const [now, setNow] = useState(new Date()); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedHourIndex, setSelectedHourIndex] = useState(0); // Track selected forecast hour
+  const [forecastView, setForecastView] = useState<ForecastView>('24-hours');
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
 
   const [crewName, setCrewName] = useState(() => {
@@ -254,14 +255,18 @@ export const StationDashboard: React.FC = () => {
           
           <StationForecastGrid 
             forecast={state.data.forecast} 
+            weekForecast={state.data.weekForecast}
             selectedIndex={selectedHourIndex}
             onSelectHour={setSelectedHourIndex}
+            onViewChange={setForecastView}
           />
 
-          <ActiveCrewList 
-            roster={selectedRoster || state.data.roster}
-            timeLabel={timeLabel}
-          />
+          {forecastView === '24-hours' && (
+            <ActiveCrewList
+              roster={selectedRoster || state.data.roster}
+              timeLabel={timeLabel}
+            />
+          )}
         </>
       )}
 

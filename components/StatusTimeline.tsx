@@ -8,7 +8,7 @@ interface StatusTimelineProps {
 }
 
 export const StatusTimeline: React.FC<StatusTimelineProps> = ({ forecast }) => {
-  const [showCount, setShowCount] = useState(false);
+  const [showCount, setShowCount] = useState(true);
   if (!forecast || forecast.length === 0) return null;
 
   const getColorClass = (status: OperationalStatus) => {

@@ -10,6 +10,8 @@ let viteServer;
 let Header;
 let SummaryStats;
 let StationForecastGrid;
+let getVisibleWeekDays;
+let StatusTimeline;
 let getAvailabilityBoxClass;
 let OperationalStatus;
 
@@ -24,7 +26,8 @@ before(async () => {
 
   ({ Header } = await viteServer.ssrLoadModule('/components/Header.tsx'));
   ({ SummaryStats } = await viteServer.ssrLoadModule('/components/SummaryStats.tsx'));
-  ({ StationForecastGrid } = await viteServer.ssrLoadModule('/components/StationForecastGrid.tsx'));
+  ({ StationForecastGrid, getVisibleWeekDays } = await viteServer.ssrLoadModule('/components/StationForecastGrid.tsx'));
+  ({ StatusTimeline } = await viteServer.ssrLoadModule('/components/StatusTimeline.tsx'));
   ({ getAvailabilityBoxClass } = await viteServer.ssrLoadModule('/components/PersonalAvailability.tsx'));
   ({ OperationalStatus } = await viteServer.ssrLoadModule('/types.ts'));
 });
@@ -54,6 +57,17 @@ const renderHeader = props => {
   act(() => component.unmount());
   return text;
 };
+
+const createWeekForecast = () => Array.from({ length: 168 }, (_, hour) => {
+  const time = new Date(2026, 7, 19, 0);
+  time.setHours(time.getHours() + hour);
+  return {
+    time,
+    label: `${String(time.getHours()).padStart(2, '0')}:00`,
+    status: hour % 3 === 0 ? OperationalStatus.GREEN : OperationalStatus.ORANGE,
+    totalCount: (hour % 8) + 1,
+  };
+});
 
 test('the offline banner is visible only while the browser is offline', () => {
   const savedAt = new Date(2026, 7, 19, 14, 0);
@@ -96,9 +110,21 @@ test('every summary card opens the same complete on-call crew list', () => {
     const modalText = flattenText(component.toJSON());
 
     assert.match(modalText, /All Crew On Call \(\s*3\s*\)/);
+    assert.match(modalText, /Helms \/ Command\s+1/);
+    assert.match(modalText, /Tier 2 \/ Navigators\s+1/);
+    assert.match(modalText, /Tier 1 \/ SOS\s+1/);
     assert.match(modalText, /Alex Helm/);
     assert.match(modalText, /Blake Navigator/);
     assert.match(modalText, /Casey Crew/);
+
+    const helmGroupIndex = modalText.lastIndexOf('Helms / Command');
+    const tier2GroupIndex = modalText.lastIndexOf('Tier 2 / Navigators');
+    const tier1GroupIndex = modalText.lastIndexOf('Tier 1 / SOS');
+    assert.ok(helmGroupIndex < modalText.indexOf('Alex Helm'));
+    assert.ok(modalText.indexOf('Alex Helm') < tier2GroupIndex);
+    assert.ok(tier2GroupIndex < modalText.indexOf('Blake Navigator'));
+    assert.ok(modalText.indexOf('Blake Navigator') < tier1GroupIndex);
+    assert.ok(tier1GroupIndex < modalText.indexOf('Casey Crew'));
 
     act(() => component.unmount());
   }
@@ -124,6 +150,7 @@ test('station forecast counts remain visible for selected and unselected hours',
   act(() => {
     component = TestRenderer.create(React.createElement(StationForecastGrid, {
       forecast,
+      weekForecast: createWeekForecast(),
       selectedIndex: 0,
       onSelectHour: () => {},
     }));
@@ -132,6 +159,106 @@ test('station forecast counts remain visible for selected and unselected hours',
   const text = flattenText(component.toJSON());
   assert.match(text, /\b4\b/);
   assert.match(text, /\b9\b/);
+  act(() => component.unmount());
+});
+
+test('seven-day filtering removes days before today and always ends on Tuesday', () => {
+  const visibleDays = getVisibleWeekDays(
+    createWeekForecast(),
+    new Date(2026, 7, 21, 12), // Friday
+  );
+
+  assert.equal(visibleDays.length, 5);
+  assert.equal(visibleDays[0][0].time.getDay(), 5);
+  assert.equal(visibleDays.at(-1)[0].time.getDay(), 2);
+});
+
+test('LA View toggles to a labelled two-row-per-day forecast', () => {
+  const weekForecast = createWeekForecast();
+  const forecast = weekForecast.slice(0, 24);
+  const viewChanges = [];
+
+  let component;
+  act(() => {
+    component = TestRenderer.create(React.createElement(StationForecastGrid, {
+      forecast,
+      weekForecast,
+      selectedIndex: 0,
+      onSelectHour: () => {},
+      onViewChange: view => viewChanges.push(view),
+    }));
+  });
+
+  const sevenDayButton = component.root.findByProps({ 'aria-label': 'Show 7 day forecast' });
+  assert.equal(sevenDayButton.props['aria-pressed'], false);
+  act(() => sevenDayButton.props.onClick());
+
+  const weeklyText = flattenText(component.toJSON());
+  for (const day of ['Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday']) {
+    assert.match(weeklyText, new RegExp(day));
+  }
+  assert.ok(weeklyText.indexOf('Wednesday') < weeklyText.indexOf('Tuesday'));
+  assert.equal(
+    component.root.findAll(node => node.props['data-week-hour'] === true).length,
+    168,
+  );
+  const dayGrids = component.root.findAll(node => node.props['data-week-day-grid'] === true);
+  assert.equal(dayGrids.length, 7);
+  assert.equal(dayGrids.every(grid => grid.props.className.includes('grid-cols-12')), true);
+
+  const hourLabels = component.root.findAll(node => node.props['data-week-hour-label'] === true);
+  assert.equal(hourLabels.length, 168);
+  assert.equal(flattenText(hourLabels[0]), '01');
+  assert.equal(flattenText(hourLabels[11]), '12');
+  assert.equal(flattenText(hourLabels[23]), '00');
+
+  const crewCounts = component.root.findAll(node => node.props['data-week-crew-count'] === true);
+  assert.equal(crewCounts.length, 168);
+  assert.equal(flattenText(crewCounts[0]), '1');
+  assert.equal(flattenText(crewCounts[7]), '8');
+  assert.deepEqual(viewChanges, ['7-days']);
+
+  const twentyFourHourButton = component.root.findByProps({ 'aria-label': 'Show 24 hour forecast' });
+  act(() => twentyFourHourButton.props.onClick());
+  assert.match(flattenText(component.toJSON()), /Select an hour to view roster/);
+  assert.deepEqual(viewChanges, ['7-days', '24-hours']);
+
+  act(() => component.unmount());
+});
+
+test('compact station forecast shows crew counts by default', () => {
+  const forecast = [
+    {
+      time: new Date(2026, 7, 19, 14, 0),
+      label: '14:00',
+      status: OperationalStatus.ORANGE,
+      totalCount: 4,
+    },
+    {
+      time: new Date(2026, 7, 19, 15, 0),
+      label: '15:00',
+      status: OperationalStatus.GREEN,
+      totalCount: 9,
+    },
+  ];
+
+  let component;
+  act(() => {
+    component = TestRenderer.create(React.createElement(StatusTimeline, { forecast }));
+  });
+
+  const initialText = flattenText(component.toJSON());
+  assert.match(initialText, /\b4\b/);
+  assert.match(initialText, /\b9\b/);
+
+  const grid = component.root.find(node =>
+    typeof node.props.className === 'string' && node.props.className.includes('grid-cols-12'),
+  );
+  act(() => grid.props.onClick());
+  const hiddenText = flattenText(component.toJSON());
+  assert.doesNotMatch(hiddenText, /\b4\b/);
+  assert.doesNotMatch(hiddenText, /\b9\b/);
+
   act(() => component.unmount());
 });
 

@@ -45,6 +45,16 @@ const sectionRow = name => {
   return row;
 };
 
+const rosterHeaderRow = startDate => {
+  const row = emptyRow();
+  for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + dayOffset);
+    row[2 + (dayOffset * 24)] = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+  }
+  return row;
+};
+
 const createRosterCsv = () => {
   const alwaysOnCall = Array.from(
     { length: COLUMN_COUNT - 2 },
@@ -52,7 +62,7 @@ const createRosterCsv = () => {
   );
 
   return [
-    emptyRow(),
+    rosterHeaderRow(new Date(2026, 7, 19)),
     emptyRow(),
     sectionRow('Command'),
     crewRow('Alex Example', [WEDNESDAY_14_COLUMN]),
@@ -146,6 +156,11 @@ test('cache-only loading renders and recalculates personal status without networ
     assert.equal(atFourteenHundred.isCachedData, true);
     assert.equal(atFourteenHundred.fetchedAt.getTime(), savedAt);
     assert.equal(atFourteenHundred.forecast.length, 24);
+    assert.equal(atFourteenHundred.weekForecast.length, 168);
+    assert.equal(atFourteenHundred.weekForecast[0].time.getDay(), 3);
+    assert.equal(atFourteenHundred.weekForecast[0].time.getHours(), 0);
+    assert.equal(atFourteenHundred.weekForecast[167].time.getDay(), 2);
+    assert.equal(atFourteenHundred.weekForecast[167].time.getHours(), 23);
     assert.equal(atFourteenHundred.personalForecast[0].status, 2);
     assert.equal(atFifteenHundred.personalForecast[0].status, 0);
   } finally {

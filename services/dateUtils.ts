@@ -10,6 +10,35 @@ export const getLastWednesday = (date: Date): Date => {
   return startOfDay(subDays(date, diff));
 };
 
+/**
+ * Personal availability normally stays inside the current Wednesday-Tuesday
+ * roster. On Tuesday, the following roster becomes visible so tomorrow's
+ * availability can be checked before the handover.
+ */
+export const getAvailabilityDateRange = (referenceDate: Date): { minDate: Date; maxDate: Date } => {
+  const minDate = getLastWednesday(referenceDate);
+  const canPreviewNextWeek = getDay(referenceDate) === 2; // Tuesday
+
+  return {
+    minDate,
+    maxDate: addDays(minDate, canPreviewNextWeek ? 13 : 6),
+  };
+};
+
+/**
+ * Guards service-level requests as well as the UI. A future roster may only be
+ * requested on Tuesday, and only for the immediately following week.
+ */
+export const canViewRosterWeek = (targetDate: Date, referenceDate: Date = new Date()): boolean => {
+  const targetWeek = getLastWednesday(targetDate);
+  const currentWeek = getLastWednesday(referenceDate);
+
+  if (targetWeek.getTime() <= currentWeek.getTime()) return true;
+
+  const nextWeek = addDays(currentWeek, 7);
+  return getDay(referenceDate) === 2 && targetWeek.getTime() === nextWeek.getTime();
+};
+
 export const getOrdinalSuffix = (day: number): string => {
   if (day > 3 && day < 21) return 'th';
   switch (day % 10) {

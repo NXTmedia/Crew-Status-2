@@ -3,7 +3,7 @@ import Papa from 'papaparse';
 import { differenceInCalendarDays, format, addHours, startOfDay, addDays } from 'date-fns';
 import { SECTION_HEADERS, VALID_COLUMN_B_FLAG, ON_CALL_STATUS_CODE, PARSER_STOP_TRIGGER, PROBATIONER_HEADER } from '../constants';
 import { CONFIG } from '../config';
-import { generatePossibleTabNames, getLastWednesday } from './dateUtils';
+import { canViewRosterWeek, generatePossibleTabNames, getLastWednesday } from './dateUtils';
 import { RosterData, SheetParseResult, DebugInfo, OperationalStatus, ForecastEntry, PersonalForecastEntry } from '../types';
 
 interface FetchResult {
@@ -64,6 +64,18 @@ const saveToCache = (sheetName: string, csvText: string) => {
   }
 };
 
+const removeFromCache = (sheetName: string) => {
+  try {
+    const store = loadCacheStore();
+    const key = sheetName.toLowerCase();
+    if (!(key in store)) return;
+    delete store[key];
+    localStorage.setItem(CACHE_KEY, JSON.stringify(store));
+  } catch (e) {
+    console.warn('Failed to remove invalid roster data from cache', e);
+  }
+};
+
 const findCacheEntry = (potentialSheetNames: string[]): CacheEntry | null => {
   const store = loadCacheStore();
   for (const name of potentialSheetNames) {
@@ -81,6 +93,38 @@ const parseCSV = (text: string): Promise<any[]> => {
       skipEmptyLines: false,
     });
   });
+};
+
+const getSheetDateKey = (value: unknown): string | null => {
+  const match = String(value ?? '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+
+  const [, day, month, year] = match;
+  return `${Number(year)}-${Number(month)}-${Number(day)}`;
+};
+
+const getDateKey = (date: Date): string =>
+  `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+
+/**
+ * Google gviz returns the first worksheet with HTTP 200 when a requested tab
+ * does not exist. Verify all seven roster dates before data is cached or used.
+ */
+export const isRosterForDate = (csvData: any[], targetDate: Date): boolean => {
+  const headerRow = csvData[0] as unknown[] | undefined;
+  if (!headerRow) return false;
+
+  const actualDates = new Set(
+    headerRow
+      .slice(ROSTER_START_COL_INDEX, ROSTER_END_COL_INDEX)
+      .map(getSheetDateKey)
+      .filter((value): value is string => value !== null),
+  );
+  const rotationStart = getLastWednesday(targetDate);
+
+  return Array.from({ length: 7 }, (_, dayOffset) =>
+    getDateKey(addDays(rotationStart, dayOffset)),
+  ).every(dateKey => actualDates.has(dateKey));
 };
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -165,20 +209,31 @@ const loadCsvForDate = async (
   let sourceTimestamp = Date.now();
 
   const loadMatchingCache = async (): Promise<boolean> => {
-    const cached = findCacheEntry(potentialSheetNames);
-    if (!cached) return false;
+    for (const potentialName of potentialSheetNames) {
+      const cached = findCacheEntry([potentialName]);
+      if (!cached) continue;
 
-    try {
-      csvData = await parseCSV(cached.csvText);
-      rawSnippet = cached.csvText.split('\n').slice(0, 10).join('\n');
-      usedSheetName = cached.sheetName;
-      sourceTimestamp = cached.timestamp;
-      isCached = true;
-      return true;
-    } catch (error) {
-      console.error('Failed to parse cached roster data', error);
-      return false;
+      try {
+        const parsedData = await parseCSV(cached.csvText);
+        if (!isRosterForDate(parsedData, targetDate)) {
+          console.warn(`Discarding cached roster with mismatched dates: ${cached.sheetName}`);
+          removeFromCache(cached.sheetName);
+          continue;
+        }
+
+        csvData = parsedData;
+        rawSnippet = cached.csvText.split('\n').slice(0, 10).join('\n');
+        usedSheetName = cached.sheetName;
+        sourceTimestamp = cached.timestamp;
+        isCached = true;
+        return true;
+      } catch (error) {
+        console.error('Failed to parse cached roster data', error);
+        removeFromCache(cached.sheetName);
+      }
     }
+
+    return false;
   };
 
   if (mode === 'cache-only' || mode === 'cache-first') {
@@ -197,6 +252,9 @@ const loadCsvForDate = async (
     for (const name of potentialSheetNames) {
       try {
         const result = await fetchCSV(name);
+        if (!isRosterForDate(result.data, targetDate)) {
+          throw new Error(`Worksheet dates do not match requested roster: ${name}`);
+        }
         csvData = result.data;
         rawSnippet = result.rawSnippet;
         usedSheetName = name;
@@ -223,7 +281,15 @@ const loadCsvForDate = async (
   return { csvData, usedSheetName, rawSnippet, isCached, sourceTimestamp };
 };
 
-export const fetchPersonalSchedule = async (targetDate: Date, crewName: string): Promise<{ data: PersonalForecastEntry[], found: boolean }> => {
+export const fetchPersonalSchedule = async (
+  targetDate: Date,
+  crewName: string,
+  referenceDate: Date = new Date(),
+): Promise<{ data: PersonalForecastEntry[], found: boolean }> => {
+  if (!canViewRosterWeek(targetDate, referenceDate)) {
+    throw new Error('NEXT_WEEK_NOT_AVAILABLE');
+  }
+
   // Use Cache First for personal schedule navigation (performance optimization)
   // If the user swipes to a day covered by the current cached sheet, it will load instantly.
   let csvData: any[];
@@ -233,7 +299,7 @@ export const fetchPersonalSchedule = async (targetDate: Date, crewName: string):
   } catch (e) {
     // If targetDate is in a future week, this likely means the sheet doesn't exist yet
     const targetWed = getLastWednesday(targetDate);
-    const currentWed = getLastWednesday(new Date());
+    const currentWed = getLastWednesday(referenceDate);
     if (targetWed > currentWed) {
       throw new Error('NEXT_WEEK_NOT_AVAILABLE');
     }
@@ -291,7 +357,7 @@ export const fetchPersonalSchedule = async (targetDate: Date, crewName: string):
 interface RowParseContext {
   csvData: any[];
   forecastAccumulators: { helms: number; navs: number; crew: number; total: number }[];
-  hourlyRosters: RosterData[];
+  hourlyRosters?: RosterData[];
   personalForecast: PersonalForecastEntry[];
   crewName?: string;
   targetDate: Date;
@@ -375,12 +441,14 @@ const parseSheetRows = (ctx: RowParseContext): boolean => {
             acc.crew++;
           }
 
-          ctx.hourlyRosters[h][effectiveCategory].push({
-            name: colA,
-            role: currentCategory,
-            status: 2,
-            sourceCell: `A${i + 1}${ctx.sourceLabel || ''}`
-          });
+          if (ctx.hourlyRosters) {
+            ctx.hourlyRosters[h][effectiveCategory].push({
+              name: colA,
+              role: currentCategory,
+              status: 2,
+              sourceCell: `A${i + 1}${ctx.sourceLabel || ''}`
+            });
+          }
         }
       }
 
@@ -481,8 +549,9 @@ export const fetchRosterData = async (
   const overflowHours = STATION_FORECAST_HOURS - overflowStartIndex;
   const needsNextWeekNow = overflowHours > 0 && overflowStartIndex < STATION_FORECAST_HOURS;
 
-  // Load next week synchronously only when it is required for the visible
-  // forecast. Otherwise warm it in the background without delaying this view.
+  // Load next week only when Tuesday's visible 24-hour forecast crosses the
+  // roster boundary. Earlier prefetching can cache Google's fallback worksheet
+  // under the wrong future-week name.
   const nextWed = addDays(rotationStart, 7);
   let nextCsvData: any[] | null = null;
   if (needsNextWeekNow) {
@@ -494,10 +563,6 @@ export const fetchRosterData = async (
       // Next week's sheet doesn't exist yet — that's fine
       console.debug("Next week sheet not available:", e);
     }
-  } else if (!isCached && mode !== 'cache-only') {
-    void loadCsvForDate(nextWed, 'network-first').catch((error) => {
-      console.debug('Next week roster was not available for background caching', error);
-    });
   }
 
   // --- Cross-week stitching: use next week data if forecast overflows ---
@@ -551,11 +616,42 @@ export const fetchRosterData = async (
     };
   });
 
+  // Build a compact operational overview for the complete current roster week.
+  // This deliberately uses only the validated Wednesday-Tuesday worksheet and
+  // is independent of the rolling 24-hour forecast above.
+  const weekForecastAccumulators = Array.from({ length: HOURS_IN_WEEK }, () => ({
+    helms: 0,
+    navs: 0,
+    crew: 0,
+    total: 0,
+  }));
+
+  parseSheetRows({
+    csvData,
+    forecastAccumulators: weekForecastAccumulators,
+    personalForecast: [],
+    targetDate: rotationStart,
+    forecastStartHour: 0,
+    forecastEndHour: HOURS_IN_WEEK,
+    columnForHour: hour => ROSTER_START_COL_INDEX + hour,
+  });
+
+  const weekForecast: ForecastEntry[] = weekForecastAccumulators.map((acc, hour) => {
+    const time = addHours(rotationStart, hour);
+    return {
+      time,
+      label: format(time, 'HH:mm'),
+      status: calculateOperationalStatus(acc.helms, acc.navs, acc.total),
+      totalCount: acc.total,
+    };
+  });
+
   return {
     roster: hourlyRosters[0],
     hourlyRosters: hourlyRosters,
     summary,
     forecast,
+    weekForecast,
     personalForecast,
     crewNameFound,
     fetchedAt: new Date(sourceTimestamp),
