@@ -2,12 +2,13 @@
 
 An offline-ready dashboard for viewing station crewing levels, personal availability, and Wednesday-to-Tuesday roster forecasts.
 
-Current release: **v2.2.0**
+Current release: **v2.3.0**
 
 ## Features
 
 - Crew view with personal on-call status and a 24-hour availability timeline.
-- Station Board with grouped active crew, a selectable 24-hour forecast, and a Wednesday-to-Tuesday seven-day overview.
+- Station Board with grouped active crew, a tap-only boats-ready trend for the next 24 hours, a selectable 24-hour forecast, and a Wednesday-to-Tuesday seven-day overview.
+- Trend details show the crew additions needed to move an amber hour to green or a red hour to amber.
 - Crew counts displayed directly in forecast boxes.
 - Installable PWA with saved roster data available offline after the first successful online load.
 

@@ -13,6 +13,7 @@ import { ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatRosterHour } from '../services/dateUtils';
 import { SingleFlightLatestQueue } from '../services/singleFlightQueue';
+import { StationTrendAnalysis } from '../components/StationTrendAnalysis';
 
 const CREW_NAME_KEY = 'RNLI_CREW_NAME';
 const LA_VIEW_KEY = 'RNLI_LA_VIEW';
@@ -274,6 +275,11 @@ export const StationDashboard: React.FC = () => {
             // Passing undefined roster disables the popup on summary stats if desired, 
             // but we can keep it functional or let ActiveCrewList handle the view.
             roster={state.data.roster} 
+          />
+
+          <StationTrendAnalysis
+            forecast={state.data.forecast}
+            hourlyRosters={state.data.hourlyRosters}
           />
           
           <StationForecastGrid 

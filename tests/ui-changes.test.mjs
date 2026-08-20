@@ -15,6 +15,8 @@ let StatusTimeline;
 let getAvailabilityBoxClass;
 let OperationalStatus;
 let SettingsModal;
+let StationTrendAnalysis;
+let describeReadinessGap;
 
 before(async () => {
   viteServer = await createServer({
@@ -31,6 +33,8 @@ before(async () => {
   ({ StatusTimeline } = await viteServer.ssrLoadModule('/components/StatusTimeline.tsx'));
   ({ getAvailabilityBoxClass } = await viteServer.ssrLoadModule('/components/PersonalAvailability.tsx'));
   ({ SettingsModal } = await viteServer.ssrLoadModule('/components/SettingsModal.tsx'));
+  ({ StationTrendAnalysis } = await viteServer.ssrLoadModule('/components/StationTrendAnalysis.tsx'));
+  ({ describeReadinessGap } = await viteServer.ssrLoadModule('/services/stationTrendUtils.ts'));
   ({ OperationalStatus } = await viteServer.ssrLoadModule('/types.ts'));
 });
 
@@ -60,8 +64,9 @@ const renderHeader = props => {
   return text;
 };
 
-const createWeekForecast = () => Array.from({ length: 168 }, (_, hour) => {
-  const date = new Date(2026, 7, 19 + Math.floor(hour / 24));
+const createWeekForecast = (weekStart = new Date(2026, 7, 19)) => Array.from({ length: 168 }, (_, hour) => {
+  const date = new Date(weekStart);
+  date.setDate(weekStart.getDate() + Math.floor(hour / 24));
   const startHour = hour % 24;
   return {
     date,
@@ -212,7 +217,11 @@ test('seven-day filtering removes days before today and always ends on Tuesday',
 });
 
 test('LA View toggles to a labelled two-row-per-day forecast', () => {
-  const weekForecast = createWeekForecast();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() - 3 + 7) % 7));
+  const weekForecast = createWeekForecast(weekStart);
   const forecast = weekForecast.slice(0, 24);
   const viewChanges = [];
 
@@ -232,26 +241,28 @@ test('LA View toggles to a labelled two-row-per-day forecast', () => {
   act(() => sevenDayButton.props.onClick());
 
   const weeklyText = flattenText(component.toJSON());
-  for (const day of ['Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday']) {
+  const visibleDayNames = getVisibleWeekDays(weekForecast).map(entries =>
+    entries[0].date.toLocaleDateString('en-GB', { weekday: 'long' }),
+  );
+  for (const day of visibleDayNames) {
     assert.match(weeklyText, new RegExp(day));
   }
-  assert.ok(weeklyText.indexOf('Wednesday') < weeklyText.indexOf('Tuesday'));
   assert.equal(
     component.root.findAll(node => node.props['data-week-hour'] === true).length,
-    168,
+    visibleDayNames.length * 24,
   );
   const dayGrids = component.root.findAll(node => node.props['data-week-day-grid'] === true);
-  assert.equal(dayGrids.length, 7);
+  assert.equal(dayGrids.length, visibleDayNames.length);
   assert.equal(dayGrids.every(grid => grid.props.className.includes('grid-cols-12')), true);
 
   const hourLabels = component.root.findAll(node => node.props['data-week-hour-label'] === true);
-  assert.equal(hourLabels.length, 168);
+  assert.equal(hourLabels.length, visibleDayNames.length * 24);
   assert.equal(flattenText(hourLabels[0]), '01');
   assert.equal(flattenText(hourLabels[11]), '12');
   assert.equal(flattenText(hourLabels[23]), '00');
 
   const crewCounts = component.root.findAll(node => node.props['data-week-crew-count'] === true);
-  assert.equal(crewCounts.length, 168);
+  assert.equal(crewCounts.length, visibleDayNames.length * 24);
   assert.equal(flattenText(crewCounts[0]), '1');
   assert.equal(flattenText(crewCounts[7]), '8');
   assert.deepEqual(viewChanges, ['7-days']);
@@ -300,6 +311,65 @@ test('compact station forecast shows crew counts by default', () => {
   const hiddenText = flattenText(component.toJSON());
   assert.doesNotMatch(hiddenText, /\b4\b/);
   assert.doesNotMatch(hiddenText, /\b9\b/);
+
+  act(() => component.unmount());
+});
+
+test('station trend is future-only, tap-selectable, and explains readiness gaps', () => {
+  const forecast = createWeekForecast().slice(0, 24).map((entry, index) => ({
+    ...entry,
+    status: index < 3 ? OperationalStatus.GREEN : index < 7 ? OperationalStatus.ORANGE : OperationalStatus.RED,
+  }));
+  const hourlyRosters = forecast.map((_, index) => ({
+    Command: Array.from({ length: index < 3 ? 2 : index < 7 ? 1 : 0 }, (__, member) => ({ name: `Helm ${member}`, role: 'Command', status: 2, sourceCell: 'A1' })),
+    'Tier 2 / Navigator': Array.from({ length: 2 }, (__, member) => ({ name: `Tier 2 ${member}`, role: 'Tier 2 / Navigator', status: 2, sourceCell: 'A2' })),
+    'Tier 1': Array.from({ length: 2 }, (__, member) => ({ name: `Crew ${member}`, role: 'Tier 1', status: 2, sourceCell: 'A3' })),
+  }));
+
+  let component;
+  act(() => {
+    component = TestRenderer.create(React.createElement(StationTrendAnalysis, { forecast, hourlyRosters }));
+  });
+
+  const text = flattenText(component.toJSON());
+  assert.match(text, /Next 24 hours · from now/);
+  assert.match(text, /First downgrade in 3h/);
+  assert.match(text, /Drag across the dock to scrub hours · tap to select/);
+  assert.doesNotMatch(text, /hover/i);
+  assert.doesNotMatch(text, /2\s+Green|1\s+Amber|0\s+Red/);
+  assert.equal(component.root.findAll(node => node.props['data-trend-point'] === true).length, 24);
+  assert.equal(component.root.findAll(node => node.props['data-trend-hour-button'] === true).length, 24);
+  assert.equal(component.root.findAll(node => node.props['data-trend-dock-label'] === true).length, 1);
+
+  const hourButtons = component.root.findAll(node => node.props['data-trend-hour-button'] === true);
+  assert.equal(hourButtons[0].props['aria-pressed'], true);
+  act(() => hourButtons[3].props.onClick());
+  assert.equal(component.root.findAll(node => node.props['data-trend-hour-button'] === true)[3].props['aria-pressed'], true);
+  assert.match(flattenText(component.root.findByProps({ 'data-trend-selected': true })), /\+3H/);
+  assert.match(flattenText(component.root.findByProps({ 'data-trend-selected': true })), /To green: \+1 Helm/);
+
+  const scrubber = component.root.findByProps({ 'data-trend-hour-strip': true });
+  const scrubTarget = {
+    getBoundingClientRect: () => ({ left: 0, width: 240 }),
+    hasPointerCapture: () => true,
+    setPointerCapture: () => {},
+    releasePointerCapture: () => {},
+  };
+  act(() => scrubber.props.onPointerDown({ currentTarget: scrubTarget, clientX: 125, pointerId: 1, pointerType: 'touch' }));
+  assert.match(flattenText(component.root.findByProps({ 'data-trend-selected': true })), /\+12H/);
+  act(() => scrubber.props.onPointerMove({ currentTarget: scrubTarget, clientX: 165, pointerId: 1, pointerType: 'touch' }));
+  assert.match(flattenText(component.root.findByProps({ 'data-trend-selected': true })), /\+16H/);
+  act(() => scrubber.props.onPointerUp({ currentTarget: scrubTarget, clientX: 165, pointerId: 1, pointerType: 'touch' }));
+  assert.match(flattenText(component.root.findByProps({ 'data-trend-selected': true })), /\+16H/);
+
+  assert.equal(
+    describeReadinessGap(OperationalStatus.RED, { helms: 0, tier2: 1, tier1: 1, total: 2 }),
+    'To amber: +1 Helm',
+  );
+  assert.equal(
+    describeReadinessGap(OperationalStatus.ORANGE, { helms: 1, tier2: 1, tier1: 1, total: 3 }),
+    'To green: +1 Helm · +1 Tier 2 · +1 crew',
+  );
 
   act(() => component.unmount());
 });
