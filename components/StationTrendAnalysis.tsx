@@ -51,7 +51,7 @@ export const StationTrendAnalysis: React.FC<StationTrendAnalysisProps> = ({ fore
   const noDataHours = data.filter(entry => entry.status === OperationalStatus.NO_DATA).length;
 
   const width = 360;
-  const height = 220;
+  const height = 200;
   const plot = { left: 8, right: 352, top: 24, bottom: 168 };
   const x = (index: number) => plot.left + (index / Math.max(1, data.length - 1)) * (plot.right - plot.left);
   const y = (boats: number) => plot.bottom - (boats / 2) * (plot.bottom - plot.top);
@@ -89,21 +89,14 @@ export const StationTrendAnalysis: React.FC<StationTrendAnalysisProps> = ({ fore
   };
 
   return (
-    <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-950 p-3.5" aria-labelledby="station-trend-title">
+    <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-950 p-3.5" aria-label="Next 24-hour readiness trend">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Next 24 hours · from now</p>
-          <h2 id="station-trend-title" className="text-lg font-medium text-slate-50">Boats-ready trend</h2>
         </div>
         <p className="w-full text-xs font-medium text-orange-300" data-trend-risk>
           {riskText} · {amberHours} amber · {redHours} red
         </p>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400" aria-label="Readiness legend">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-green-500" />2 boats</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" />1 boat</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />No boats</span>
       </div>
 
       <svg
@@ -169,11 +162,10 @@ export const StationTrendAnalysis: React.FC<StationTrendAnalysisProps> = ({ fore
             </text>
           </g>
         ))}
-        <text x={(plot.left + plot.right) / 2} y={height - 8} textAnchor="middle" fill="#64748b" fontSize="10">Hour ending</text>
       </svg>
 
       <div
-        className="relative mb-3 mt-7 flex h-14 touch-none select-none items-end gap-0.5 px-0.5"
+        className="relative mb-3 mt-5 flex h-14 touch-none select-none items-end gap-0.5 px-0.5"
         aria-label="Drag across the hours to inspect"
         onPointerDown={startScrubbing}
         onPointerMove={previewPointerHour}

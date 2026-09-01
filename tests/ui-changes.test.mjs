@@ -334,6 +334,8 @@ test('station trend is future-only, tap-selectable, and explains readiness gaps'
   const text = flattenText(component.toJSON());
   assert.match(text, /Next 24 hours · from now/);
   assert.match(text, /First downgrade in 3h/);
+  assert.doesNotMatch(text, /Boats-ready trend|2 boats|1 boat|No boats/);
+  assert.doesNotMatch(text, /\bHour ending\b/);
   assert.match(text, /Drag across the dock to scrub hours · tap to select/);
   assert.doesNotMatch(text, /hover/i);
   assert.doesNotMatch(text, /2\s+Green|1\s+Amber|0\s+Red/);
